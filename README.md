@@ -387,6 +387,27 @@ EndPoint Monitor background job completed.
 Done with monitor
 ```
 
+## Uninstalling EndPoint Monitor
+
+```sh
+cd /var/www/html/admin/modules
+
+fwconsole ma uninstall endpointmonitor --force
+rm -rf /var/www/html/admin/modules/endpointmonitor
+
+fwconsole chown
+fwconsole reload
+
+cd
+```
+
+Verify it has gone:
+
+```sh
+fwconsole ma list | grep -i endpointmonitor || echo "endpointmonitor removed"
+ls -ld /var/www/html/admin/modules/endpointmonitor 2>/dev/null || echo "endpointmonitor directory removed"
+```
+
 ## Notes
 
 EndPoint Monitor currently uses reconciliation as the source of truth for status
