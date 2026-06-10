@@ -51,7 +51,7 @@ cd
 
 Use `installlocal` when installing from an unpacked local module directory.
 
-### Option 3: Developer install from a GitHub
+### Option 3: Developer install from GitHub
 
 ```sh
 cd /var/www/html/admin/modules
