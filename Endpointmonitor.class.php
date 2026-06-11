@@ -1532,6 +1532,7 @@ class Endpointmonitor implements \BMO {
 		$rows = $stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [];
 		foreach ($rows as &$row) {
 			$row['source'] = $this->sourceLabel($row['source'] ?? '');
+			$row['reason'] = $this->reasonLabel($row['reason'] ?? '');
 		}
 		unset($row);
 
@@ -1730,7 +1731,7 @@ class Endpointmonitor implements \BMO {
 			'',
 			'Endpoint: ' . $extension,
 			'Current state: ' . $toState,
-			'Reason: ' . (($transition['reason'] ?? '') !== '' ? $transition['reason'] : '-'),
+			'Reason: ' . $this->reasonLabel($transition['reason'] ?? ''),
 			'Latency: ' . $latency,
 			'',
 			'Endpoint details',
@@ -2033,6 +2034,19 @@ class Endpointmonitor implements \BMO {
 		}
 
 		return $source !== '' ? $source : '-';
+	}
+
+	private function reasonLabel(?string $reason): string {
+		$reason = trim((string)$reason);
+
+		switch ($reason) {
+			case 'status_change':
+				return 'Status changed';
+			case 'removed':
+				return 'Contact removed';
+		}
+
+		return $reason !== '' ? $reason : '-';
 	}
 
 	private function now(): string {

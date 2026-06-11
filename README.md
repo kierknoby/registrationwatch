@@ -295,8 +295,8 @@ as unknown.
 
 `Removed` is not used as a current state. When an endpoint previously had a
 contact or registered/reachable state and reconciliation finds no contact, the
-current state becomes `Not Registered` and the transition history row uses
-`reason = removed`.
+current state becomes `Not Registered` and the transition reason is shown as
+Contact removed.
 
 ## Status History
 
@@ -306,9 +306,9 @@ The admin page shows the most recent transitions.
 Reconciliation writes history rows with:
 
 * `source = Asterisk`
-* `reason = removed` when a previously contacted/registered endpoint becomes
+* Contact removed when a previously contacted/registered endpoint becomes
   `Not Registered`
-* `reason = status_change` for other state changes
+* Status changed for other state changes
 
 Until AMI ContactStatus ingestion exists, short flaps can still be missed
 between reconciliation runs.
