@@ -1,5 +1,7 @@
 # EndPoint Monitor for FreePBX 17
 
+**Development branch warning:** `1-1-0_dev` is not safe to install or test yet. Use the `main` branch for the current stable 1.0.1 release.
+
 ## Current Release
 
 Patch release: 1.0.1, released at 18:45 on 11 June 2026.
