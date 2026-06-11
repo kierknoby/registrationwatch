@@ -1,6 +1,15 @@
 # EndPoint Monitor for FreePBX 17
 
-Initial release: 1.0.0, 19:00 on 10 June 2026.
+Patch release: 1.0.1, 11 June 2026.
+
+## Version Update
+
+From 1.0.0 to 1.0.1 on 11th June 2026 by kierknoby
+
+Fixes alert send reservation to prevent duplicate normal alert emails, prevents
+duplicate Test Email click binding, removes duplicate notes autosave handling,
+maps internal source labels to Asterisk, updates FreePBX/PBXact 17-only release
+wording, and includes minor alert email copy cleanup.
 
 Use with FreePBX/PBXact 17 only. DO NOT install on FreePBX/PBXact 16 and below.
 
@@ -16,7 +25,7 @@ probe service.
 
 ## Requirements
 
-* FreePBX 17 or later
+* FreePBX/PBXact 17 only
 * PJSIP channel driver
 * Asterisk manager command support available to FreePBX
 * Existing FreePBX PJSIP extensions/devices
@@ -37,7 +46,18 @@ fwconsole chown
 fwconsole reload
 ```
 
-### Option 2: Developer install from a local copy
+### Option 2: Developer install from GitHub
+
+```sh
+cd /var/www/html/admin/modules
+git clone https://github.com/kierknoby/endpointmonitor.git endpointmonitor
+fwconsole ma installlocal endpointmonitor
+fwconsole chown
+fwconsole reload
+cd
+```
+
+### Option 3: Developer install from a local copy
 
 From inside the module directory:
 
@@ -50,17 +70,6 @@ cd
 ```
 
 Use `installlocal` when installing from an unpacked local module directory.
-
-### Option 3: Developer install from GitHub
-
-```sh
-cd /var/www/html/admin/modules
-git clone https://github.com/kierknoby/endpointmonitor.git endpointmonitor
-fwconsole ma installlocal endpointmonitor
-fwconsole chown
-fwconsole reload
-cd
-```
 
 The module appears under **Admin > EndPoint Monitor**.
 
@@ -100,9 +109,8 @@ server-side, even when the admin page is not open.
 The background job currently:
 
 * Reads alert and polling settings.
-* Runs reconciliation even when alerts are disabled.
 * Skips cleanly if polling is disabled.
-* Runs reconciliation when enabled.
+* Runs reconciliation when polling is enabled, even if alerts are disabled.
 * Records state transitions.
 * Processes eligible alert decisions.
 * Writes status output to the FreePBX job runner.
@@ -121,8 +129,10 @@ fwconsole job --run=<job_id> --force
 ## Security Model
 
 * AJAX commands use a fixed command allowlist.
-* `refresh`, `setenabled`, `savealerts`, and `testemail` require a FreePBX CSRF
-  token.
+* Current AJAX commands are `refresh`, `setenabled`, `savenotes`,
+  `saveshowlimit`, `savealerts`, `savetopology`, `testemail`, and
+  `gettopology`.
+* AJAX handlers require a FreePBX CSRF token.
 * SQL writes use prepared statements.
 * Asterisk access is read-only in this phase.
 * No shell execution is used by the module.
@@ -240,6 +250,9 @@ First baseline transitions from Unknown are suppressed. If an endpoint recovers
 to Registered (No Qualify), the email notes that qualify is disabled and RTT is
 unavailable.
 
+Alert emails include a reminder that email delivery can be delayed and that
+current status should be checked in the FreePBX module.
+
 Alert decisions are recorded per recipient. The module prevents repeated
 handling of the same transition and recipient once an alert-history row exists.
 This avoids repeated sends when manual refresh and scheduled reconciliation
@@ -305,7 +318,7 @@ result VARCHAR(40) NOT NULL
 error TEXT NULL
 ```
 
-Recommended duplicate guard:
+Duplicate guard:
 
 ```sql
 UNIQUE KEY endpointmonitor_alert_unique_transition_recipient

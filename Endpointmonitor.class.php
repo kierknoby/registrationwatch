@@ -13,7 +13,7 @@ namespace FreePBX\modules;
 class Endpointmonitor implements \BMO {
 
 	/** Fallback only. Authoritative version lives in module.xml. */
-	const VERSION = '1.0.0';
+	const VERSION = '1.0.1';
 
 	const STATUS_REACHABLE = 'Reachable';
 	const STATUS_UNREACHABLE = 'Unreachable';
@@ -1123,11 +1123,7 @@ class Endpointmonitor implements \BMO {
 					}
 
 					$email = $this->buildAlertEmail($transition, $alertType);
-					$result = $this->sendEmail($recipient, $email['subject'], $email['message']);
-					if (!$result['status']) {
-						$this->logWarning('Alert email send failed for ' . $recipient . ' on extension ' . $transition['extension'] . ': ' . $result['message']);
-					}
-					$this->insertAlertHistory([
+					$reserved = $this->reserveAlertHistory([
 						'extension' => $transition['extension'],
 						'history_id' => (int)$transition['id'],
 						'alert_type' => $alertType,
@@ -1136,9 +1132,25 @@ class Endpointmonitor implements \BMO {
 						'subject' => $email['subject'],
 						'message' => $email['message'],
 						'sent_at' => $now,
-						'result' => $result['status'] ? 'sent' : 'failed',
-						'error' => $result['status'] ? null : $result['message'],
+						'result' => 'pending',
+						'error' => null,
 					]);
+					if (!$reserved) {
+						continue;
+					}
+
+					$result = $this->sendEmail($recipient, $email['subject'], $email['message']);
+					if (!$result['status']) {
+						$this->logWarning('Alert email send failed for ' . $recipient . ' on extension ' . $transition['extension'] . ': ' . $result['message']);
+					}
+					$this->updateReservedAlertHistory(
+						(int)$transition['id'],
+						$alertType,
+						$recipient,
+						$result['status'] ? 'sent' : 'failed',
+						$result['status'] ? null : $result['message'],
+						$this->now()
+					);
 				}
 			}
 		} catch (\Exception $e) {
@@ -1409,7 +1421,13 @@ class Endpointmonitor implements \BMO {
 			LIMIT 25'
 		);
 
-		return $stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [];
+		$rows = $stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [];
+		foreach ($rows as &$row) {
+			$row['source'] = $this->sourceLabel($row['source'] ?? '');
+		}
+		unset($row);
+
+		return $rows;
 	}
 
 	private function getAlertHistory(): array {
@@ -1520,7 +1538,8 @@ class Endpointmonitor implements \BMO {
 			'Time: ' . $transition['created_at'],
 			'Source: Asterisk',
 			'',
-			'Note: Emails can experience delays. Please verify current status in the EndPoint Monitor module',
+			'Please note: email delivery can be delayed.',
+			'Check current status in the FreePBX module.',
 		];
 
 		return [
@@ -1651,6 +1670,49 @@ class Endpointmonitor implements \BMO {
 			':sent_at' => $alert['sent_at'],
 			':result' => $alert['result'],
 			':error' => $alert['error'],
+		]);
+	}
+
+	private function reserveAlertHistory(array $alert): bool {
+		$stmt = $this->db()->prepare(
+			'INSERT IGNORE INTO endpointmonitor_alert_history
+				(extension, history_id, alert_type, status, recipient, subject, message, sent_at, result, error)
+			VALUES
+				(:extension, :history_id, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
+		);
+		$stmt->execute([
+			':extension' => $alert['extension'],
+			':history_id' => $alert['history_id'],
+			':alert_type' => $alert['alert_type'],
+			':status' => $alert['status'],
+			':recipient' => $alert['recipient'],
+			':subject' => $alert['subject'],
+			':message' => $alert['message'],
+			':sent_at' => $alert['sent_at'],
+			':result' => $alert['result'],
+			':error' => $alert['error'],
+		]);
+
+		return $stmt->rowCount() > 0;
+	}
+
+	private function updateReservedAlertHistory(int $historyId, string $alertType, string $recipient, string $result, ?string $error, string $sentAt): void {
+		$stmt = $this->db()->prepare(
+			'UPDATE endpointmonitor_alert_history
+			SET sent_at = :sent_at,
+				result = :result,
+				error = :error
+			WHERE history_id = :history_id
+				AND alert_type = :alert_type
+				AND recipient = :recipient'
+		);
+		$stmt->execute([
+			':sent_at' => $sentAt,
+			':result' => $result,
+			':error' => $error,
+			':history_id' => $historyId,
+			':alert_type' => $alertType,
+			':recipient' => $recipient,
 		]);
 	}
 

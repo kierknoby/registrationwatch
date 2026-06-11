@@ -2,19 +2,20 @@
 	<rawname>endpointmonitor</rawname>
 	<repo>unsupported</repo>
 	<name>EndPoint Monitor</name>
-	<version>1.0.0</version>
+	<version>1.0.1</version>
 	<publisher>20tele.com</publisher>
 	<license>GPLv3+</license>
 	<licenselink>http://www.gnu.org/licenses/gpl-3.0.txt</licenselink>
 	<changelog>
-		*1.0.0* Adds reconciliation-driven email alert settings and per-recipient alert history without background workers.
+		*1.0.1* Fixes alert send reservation, duplicate Test Email binding risk, source labels, and release wording.
+		*1.0.0* Adds reconciliation-driven email alert settings and per-recipient alert history using the FreePBX Job system.
 		*0.2.2* Adds transition-based status history during reconciliation without alerting.
 		*0.2.1* Adds FreePBX CSRF validation for AJAX actions, narrows discovery to PJSIP extension devices/users, maps NonQual to Registered (No Qualify), and documents CLI parsing technical debt.
 		*0.2.0* Adds PJSIP endpoint discovery, per-endpoint monitoring toggles, persisted current status fields, and a manual read-only contact refresh.
 		*0.1.0* Initial scaffold-only module shell. Adds FreePBX module identity, install/uninstall hooks, admin page, assets, and placeholder endpoint monitoring sections. No endpoint monitoring logic yet.
 	</changelog>
 	<category>Admin</category>
-	<description>EndPoint Monitor scaffold for future PJSIP endpoint/contact status monitoring and alerting.</description>
+	<description>EndPoint Monitor provides PJSIP endpoint/contact status monitoring and alerting through FreePBX reconciliation jobs.</description>
 	<menuitems>
 		<endpointmonitor>EndPoint Monitor</endpointmonitor>
 	</menuitems>

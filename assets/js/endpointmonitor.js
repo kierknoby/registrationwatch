@@ -247,7 +247,7 @@
 			});
 		});
 
-		$('#em-test-email').on('click', function () {
+		$('#em-test-email').off('click.endpointmonitor').on('click.endpointmonitor', function () {
 			var button = $(this);
 			button.prop('disabled', true);
 			$.ajax({
@@ -272,63 +272,6 @@
 			});
 		});
 	});
-
-        var noteTimers = {};
-        
-                function saveEndpointNote(input) {
-                        var $input = $(input);
-                        var extension = $input.data('extension') || '';
-                        var $status = $input.closest('td').find('.em-notes-status');
-                        var value = $input.val() || '';
-        
-                        if (value.length > 48) {
-                                value = value.substring(0, 48);
-                                $input.val(value);
-                        }
-        
-                        if (!extension) {
-                                $status.text('Save failed');
-                                return;
-                        }
-        
-                        $status.text('Saving...');
-        
-                        $.ajax({
-                                url: window.location.href,
-                                method: 'POST',
-                                dataType: 'json',
-                                data: {
-                                        command: 'savenotes',
-                                        extension: extension,
-                                        notes: value,
-                                        token: csrfToken
-                                }
-                        }).done(function(response) {
-                                if (response && response.status) {
-                                        $input.val(response.notes || '');
-                                        if (response.notes_updated_at) {
-                                                $status.text('Saved ' + response.notes_updated_at);
-                                        } else {
-                                                $status.text('Cleared');
-                                        }
-                                        return;
-                                }
-        
-                                $status.text('Save failed');
-                        }).fail(function() {
-                                $status.text('Save failed');
-                        });
-                }
-        
-                $(document).on('input', '.endpointmonitor .em-endpoint-notes', function() {
-                        var input = this;
-                        var extension = $(input).data('extension') || '';
-        
-                        clearTimeout(noteTimers[extension]);
-                        noteTimers[extension] = setTimeout(function() {
-                                saveEndpointNote(input);
-                        }, 700);
-                });
 }(jQuery));
 
 
@@ -726,4 +669,3 @@
                 });
         });
 })(window.jQuery);
-
