@@ -33,7 +33,8 @@
 	function renderStatusRows(endpoints) {
 		$.each(endpoints || [], function (_, endpoint) {
 			var rows = endpointRows(endpoint.extension);
-			rows.find('.em-status-value').text(endpoint.last_known_status || '-');
+			var status = endpoint.last_known_status || endpoint.status || '-';
+			rows.find('.em-status-value').text(status);
 			rows.find('.em-device-name').text(endpoint.device_name || '-');
 			rows.find('.em-firmware-version').text(endpoint.firmware_version || '-');
 			rows.find('.em-source-ip').text(endpoint.source_ip || '-');
@@ -43,7 +44,7 @@
 			rows.find('.em-last-checked').text(endpoint.last_checked_at || '-');
 			if (endpoint.latency_ms) {
 				rows.find('.em-latency').text(endpoint.latency_ms + ' ms');
-			} else if (endpoint.last_known_status === 'Registered (No Qualify)') {
+			} else if (status === 'Registered (No Qualify)') {
 				rows.find('.em-latency').text('Unavailable; qualify is not enabled.');
 			} else {
 				rows.find('.em-latency').text('-');
@@ -171,7 +172,7 @@
 				method: 'POST',
 				dataType: 'json',
 				data: {
-					command: 'refresh',
+					command: isAutomatic ? 'gettopology' : 'refresh',
 					token: csrfToken
 				}
 			}).done(function (response) {
@@ -183,8 +184,12 @@
 				if (window.EndpointMonitorRenderEndpointMap) {
 					window.EndpointMonitorRenderEndpointMap(response.endpoints);
 				}
-				renderHistoryRows(response.statusHistory);
-				renderAlertHistoryRows(response.alertHistory);
+				if (response.statusHistory) {
+					renderHistoryRows(response.statusHistory);
+				}
+				if (response.alertHistory) {
+					renderAlertHistoryRows(response.alertHistory);
+				}
 				if (!isAutomatic) {
 					showMessage(response.message || 'Endpoint status refreshed.', 'success');
 				}

@@ -1732,7 +1732,7 @@ class Endpointmonitor implements \BMO {
 
 	private function validateCsrfToken(): bool {
 		if (!method_exists('\FreePBX', 'checkToken')) {
-			return true;
+			return false;
 		}
 
 		$token = isset($_REQUEST['token']) ? (string)$_REQUEST['token'] : '';
