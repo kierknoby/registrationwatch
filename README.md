@@ -79,6 +79,76 @@ Use `installlocal` when installing from an unpacked local module directory.
 
 The module appears under **Admin > EndPoint Monitor**.
 
+## Updating
+
+Do not uninstall the module when updating. Uninstalling removes the module tables.
+
+A normal update keeps the existing EndPoint Monitor database tables, settings, monitored endpoints, status history, and alert history.
+
+### Check the installed version
+
+```sh
+fwconsole ma list | grep -i endpointmonitor
+```
+
+Expected output includes the installed version and enabled state, for example:
+
+```text
+| endpointmonitor     | 1.0.1      | Enabled | GPLv3+      | Unsigned  |
+```
+
+You can also check the module file directly:
+
+```sh
+grep -n "<version>" /var/www/html/admin/modules/endpointmonitor/module.xml
+```
+
+### Option 1: Existing module directory
+
+Place the updated `endpointmonitor` directory in `/var/www/html/admin/modules/`, then:
+
+```sh
+fwconsole ma install endpointmonitor
+fwconsole chown
+fwconsole reload
+```
+
+### Option 2: Developer update from GitHub
+
+From inside the existing GitHub-installed module directory:
+
+```sh
+cd /var/www/html/admin/modules/endpointmonitor
+git config --global --add safe.directory /var/www/html/admin/modules/endpointmonitor
+git pull origin main
+fwconsole ma installlocal endpointmonitor
+fwconsole chown
+fwconsole reload
+cd
+```
+
+### Option 3: Developer update from a local copy
+
+From inside the updated module directory:
+
+```sh
+cd /var/www/html/admin/modules/endpointmonitor
+fwconsole ma installlocal
+fwconsole chown
+fwconsole reload
+cd
+```
+
+Use `installlocal` when updating from an unpacked local module directory.
+
+After updating, check the installed version again:
+
+```sh
+fwconsole ma list | grep -i endpointmonitor
+```
+
+Then open **Admin > EndPoint Monitor** and confirm existing endpoints, settings, and history are still present.
+
 ## Architecture
 
 EndPoint Monitor has four current paths:
