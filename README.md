@@ -1,6 +1,8 @@
 # EndPoint Monitor for FreePBX 17
 
-Patch release: 1.0.1, 11 June 2026.
+## Current Release
+
+Patch release: 1.0.1, released at 18:45 on 11 June 2026.
 
 ## Version Update
 
@@ -11,7 +13,11 @@ duplicate Test Email click binding, removes duplicate notes autosave handling,
 maps internal source labels to Asterisk, updates FreePBX/PBXact 17-only release
 wording, and includes minor alert email copy cleanup.
 
+## Compatibility
+
 Use with FreePBX/PBXact 17 only. DO NOT install on FreePBX/PBXact 16 and below.
+
+## Overview
 
 EndPoint Monitor discovers FreePBX PJSIP extensions, lets administrators enable
 or disable monitoring per endpoint, and shows the latest contact status after
