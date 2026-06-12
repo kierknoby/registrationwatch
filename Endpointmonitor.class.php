@@ -21,6 +21,7 @@ class Endpointmonitor implements \BMO {
 	const STATUS_UNKNOWN = 'Unknown';
 	const STATUS_NOT_REGISTERED = 'Not Registered';
 	const CSRF_SESSION_KEY = 'endpointmonitor_csrf_token';
+	const ALERT_TIMING_MAX_SECONDS = 86400;
 
 	private $settingsDefaults = [
 		'alert_enabled' => '0',
@@ -383,6 +384,14 @@ class Endpointmonitor implements \BMO {
 		if ($recipientsRaw !== '' && !$recipients) {
 			return ['status' => false, 'message' => _('Enter at least one valid email recipient.')];
 		}
+		$debounceSeconds = $this->normaliseAlertTimingSeconds('debounce_seconds', $this->settingsDefaults['debounce_seconds']);
+		if ($debounceSeconds === null) {
+			return ['status' => false, 'message' => _('Debounce delay must be a whole number from 0 to 86400 seconds.')];
+		}
+		$repeatSuppressionSeconds = $this->normaliseAlertTimingSeconds('repeat_suppression_seconds', $this->settingsDefaults['repeat_suppression_seconds']);
+		if ($repeatSuppressionSeconds === null) {
+			return ['status' => false, 'message' => _('Repeat suppression must be a whole number from 0 to 86400 seconds.')];
+		}
 
 		$settings = [
 			'alert_enabled' => !empty($_REQUEST['alert_enabled']) ? '1' : '0',
@@ -390,8 +399,8 @@ class Endpointmonitor implements \BMO {
 			'alert_on_unreachable' => !empty($_REQUEST['alert_on_unreachable']) ? '1' : '0',
 			'alert_on_not_registered' => !empty($_REQUEST['alert_on_not_registered']) ? '1' : '0',
 			'alert_on_recovery' => !empty($_REQUEST['alert_on_recovery']) ? '1' : '0',
-			'debounce_seconds' => (string)max(0, (int)($_REQUEST['debounce_seconds'] ?? $this->settingsDefaults['debounce_seconds'])),
-			'repeat_suppression_seconds' => (string)max(0, (int)($_REQUEST['repeat_suppression_seconds'] ?? $this->settingsDefaults['repeat_suppression_seconds'])),
+			'debounce_seconds' => (string)$debounceSeconds,
+			'repeat_suppression_seconds' => (string)$repeatSuppressionSeconds,
 		];
 
 		foreach ($settings as $key => $value) {
@@ -1198,7 +1207,7 @@ class Endpointmonitor implements \BMO {
 		}
 
 		try {
-			$debounceSeconds = max(0, (int)$settings['debounce_seconds']);
+			$debounceSeconds = min(self::ALERT_TIMING_MAX_SECONDS, max(0, (int)$settings['debounce_seconds']));
 			$cutoff = date('Y-m-d H:i:s', strtotime($now) - $debounceSeconds);
 			$stmt = $this->db()->prepare(
 				'SELECT h.id, h.extension, h.from_state, h.to_state, h.source, h.reason, h.contact_uri, h.latency_ms, h.created_at
@@ -1313,7 +1322,7 @@ class Endpointmonitor implements \BMO {
         }
 
 	private function isRepeatSuppressed(array $transition, string $alertType, string $recipient, array $settings, string $now): bool {
-		$seconds = max(0, (int)$settings['repeat_suppression_seconds']);
+		$seconds = min(self::ALERT_TIMING_MAX_SECONDS, max(0, (int)$settings['repeat_suppression_seconds']));
 		if ($seconds === 0) {
 			return false;
 		}
@@ -1560,7 +1569,7 @@ class Endpointmonitor implements \BMO {
 
 	private function normalisePrunePolicy(string $policy): string {
 		$policy = strtolower(trim($policy));
-		return in_array($policy, ['daily', 'monthly', 'yearly', 'never'], true) ? $policy : 'never';
+		return in_array($policy, ['hourly', 'daily', 'monthly', 'yearly', 'never'], true) ? $policy : 'never';
 	}
 
 	private function applyHistoryPruning(?string $historyType = null, ?string $policy = null): array {
@@ -1617,6 +1626,9 @@ class Endpointmonitor implements \BMO {
 		try {
 			$cutoff = new \DateTimeImmutable($this->now());
 			switch ($policy) {
+				case 'hourly':
+					$cutoff = $cutoff->modify('-1 hour');
+					break;
 				case 'daily':
 					$cutoff = $cutoff->modify('-1 day');
 					break;
@@ -1635,6 +1647,20 @@ class Endpointmonitor implements \BMO {
 		}
 
 		return $cutoff->format('Y-m-d H:i:s');
+	}
+
+	private function normaliseAlertTimingSeconds(string $key, string $default): ?int {
+		$value = isset($_REQUEST[$key]) ? trim((string)$_REQUEST[$key]) : trim($default);
+		if ($value === '' || !ctype_digit($value)) {
+			return null;
+		}
+
+		$seconds = (int)$value;
+		if ($seconds < 0 || $seconds > self::ALERT_TIMING_MAX_SECONDS) {
+			return null;
+		}
+
+		return $seconds;
 	}
 
 	private function positiveRequestId(string $key): int {

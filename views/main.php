@@ -32,10 +32,10 @@ if (!in_array($uiShowLimit, ['6', '30', '60', '120', 'all'], true)) {
 }
 $statusPrunePolicy = isset($pruneSettings['status_history_prune_policy']) ? strtolower((string)$pruneSettings['status_history_prune_policy']) : 'never';
 $alertPrunePolicy = isset($pruneSettings['alert_history_prune_policy']) ? strtolower((string)$pruneSettings['alert_history_prune_policy']) : 'never';
-if (!in_array($statusPrunePolicy, ['daily', 'monthly', 'yearly', 'never'], true)) {
+if (!in_array($statusPrunePolicy, ['hourly', 'daily', 'monthly', 'yearly', 'never'], true)) {
 	$statusPrunePolicy = 'never';
 }
-if (!in_array($alertPrunePolicy, ['daily', 'monthly', 'yearly', 'never'], true)) {
+if (!in_array($alertPrunePolicy, ['hourly', 'daily', 'monthly', 'yearly', 'never'], true)) {
 	$alertPrunePolicy = 'never';
 }
 $mapDefaultLimit = $uiShowLimit === 'all' ? count($mapEndpoints) : (int)$uiShowLimit;
@@ -236,13 +236,13 @@ $_emAssetVer = max(
 							</div>
 							<div class="form-group">
 								<label for="em-debounce-seconds"><?php echo _('Debounce delay (seconds)'); ?></label>
-								<input type="number" id="em-debounce-seconds" class="form-control" min="0" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('How long a problem must remain active before an alert is sent. Use 0 to alert immediately.'); ?></p>
+								<input type="number" id="em-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
+								<p class="help-block"><?php echo _('How long a problem must remain active before an alert is sent. Use 0 to alert immediately. Maximum 86400 seconds, 24 hours.'); ?></p>
 							</div>
 							<div class="form-group">
 								<label for="em-repeat-suppression-seconds"><?php echo _('Repeat suppression (seconds)'); ?></label>
-								<input type="number" id="em-repeat-suppression-seconds" class="form-control" min="0" step="1" value="<?php echo htmlspecialchars($alertSettings['repeat_suppression_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('How long to wait before sending another alert for the same endpoint and alert type. Use 0 to send every eligible alert.'); ?></p>
+								<input type="number" id="em-repeat-suppression-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['repeat_suppression_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
+								<p class="help-block"><?php echo _('How long to wait before sending another alert for the same endpoint and alert type. Use 0 to send every eligible alert. Maximum 86400 seconds, 24 hours.'); ?></p>
 							</div>
 						</div>
 						<div class="col-sm-6">
@@ -287,16 +287,17 @@ $_emAssetVer = max(
 				</div>
 				<div class="panel-body">
 					<div class="em-prune-control" data-history-type="status">
-						<div class="form-inline">
-							<label for="em-status-prune-policy"><?php echo _('Prune'); ?></label>
-							<select id="em-status-prune-policy" class="form-control input-sm em-prune-policy">
-								<option value="never" <?php echo $statusPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
-								<option value="daily" <?php echo $statusPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
-								<option value="monthly" <?php echo $statusPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
-								<option value="yearly" <?php echo $statusPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
-							</select>
-							<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
-						</div>
+							<div class="form-inline">
+								<label for="em-status-prune-policy"><?php echo _('Prune'); ?></label>
+								<select id="em-status-prune-policy" class="form-control input-sm em-prune-policy">
+									<option value="never" <?php echo $statusPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
+									<option value="hourly" <?php echo $statusPrunePolicy === 'hourly' ? 'selected' : ''; ?>><?php echo _('Hourly'); ?></option>
+									<option value="daily" <?php echo $statusPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
+									<option value="monthly" <?php echo $statusPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
+									<option value="yearly" <?php echo $statusPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
+								</select>
+								<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
+							</div>
 						<label class="checkbox-inline em-prune-confirm-wrap" style="<?php echo $statusPrunePolicy === 'never' ? 'display:none;' : ''; ?>">
 							<input type="checkbox" class="em-prune-confirm">
 							<?php echo _('I understand this will permanently delete older Status History rows.'); ?>
@@ -354,16 +355,17 @@ $_emAssetVer = max(
 				</div>
 				<div class="panel-body">
 					<div class="em-prune-control" data-history-type="alert">
-						<div class="form-inline">
-							<label for="em-alert-prune-policy"><?php echo _('Prune'); ?></label>
-							<select id="em-alert-prune-policy" class="form-control input-sm em-prune-policy">
-								<option value="never" <?php echo $alertPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
-								<option value="daily" <?php echo $alertPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
-								<option value="monthly" <?php echo $alertPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
-								<option value="yearly" <?php echo $alertPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
-							</select>
-							<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
-						</div>
+							<div class="form-inline">
+								<label for="em-alert-prune-policy"><?php echo _('Prune'); ?></label>
+								<select id="em-alert-prune-policy" class="form-control input-sm em-prune-policy">
+									<option value="never" <?php echo $alertPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
+									<option value="hourly" <?php echo $alertPrunePolicy === 'hourly' ? 'selected' : ''; ?>><?php echo _('Hourly'); ?></option>
+									<option value="daily" <?php echo $alertPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
+									<option value="monthly" <?php echo $alertPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
+									<option value="yearly" <?php echo $alertPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
+								</select>
+								<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
+							</div>
 						<label class="checkbox-inline em-prune-confirm-wrap" style="<?php echo $alertPrunePolicy === 'never' ? 'display:none;' : ''; ?>">
 							<input type="checkbox" class="em-prune-confirm">
 							<?php echo _('I understand this will permanently delete older Alert History rows.'); ?>

@@ -331,14 +331,32 @@
 			});
 		});
 
-		$('.endpointmonitor').on('change', '.em-prune-policy', function () {
+		function markPruneApplied(button) {
+			var originalText = button.data('endpointmonitor-prune-original-text');
+			var restoreTimer = button.data('endpointmonitor-prune-restore-timer');
+			if (!originalText) {
+				originalText = $.trim(button.text()) || 'Apply';
+				button.data('endpointmonitor-prune-original-text', originalText);
+			}
+			if (restoreTimer) {
+				window.clearTimeout(restoreTimer);
+			}
+
+			button.text('✓ Applied');
+			button.data('endpointmonitor-prune-restore-timer', window.setTimeout(function () {
+				button.text(originalText);
+				button.removeData('endpointmonitor-prune-restore-timer');
+			}, 3000));
+		}
+
+		root.off('change.endpointmonitorPrune', '.em-prune-policy').on('change.endpointmonitorPrune', '.em-prune-policy', function () {
 			var control = $(this).closest('.em-prune-control');
 			var policy = String($(this).val() || 'never').toLowerCase();
 			control.find('.em-prune-confirm').prop('checked', false);
 			control.find('.em-prune-confirm-wrap').toggle(policy !== 'never');
 		});
 
-		$('.endpointmonitor').on('click', '.em-apply-prune', function () {
+		root.off('click.endpointmonitorPrune', '.em-apply-prune').on('click.endpointmonitorPrune', '.em-apply-prune', function () {
 			var button = $(this);
 			var control = button.closest('.em-prune-control');
 			var historyType = control.data('history-type') || '';
@@ -346,6 +364,9 @@
 			var confirmed = control.find('.em-prune-confirm').is(':checked') ? 1 : 0;
 			var token = endpointMonitorToken(root);
 
+			if (button.data('endpointmonitor-prune-in-flight')) {
+				return;
+			}
 			if (policy !== 'never' && !confirmed) {
 				showMessage('Confirm permanent deletion before applying pruning.', 'error');
 				return;
@@ -355,7 +376,7 @@
 				return;
 			}
 
-			button.prop('disabled', true);
+			button.data('endpointmonitor-prune-in-flight', true).prop('disabled', true);
 			$.ajax({
 				url: 'ajax.php?module=endpointmonitor',
 				method: 'POST',
@@ -374,25 +395,29 @@
 				}
 
 				control.find('.em-prune-confirm').prop('checked', false);
-				control.find('.em-prune-confirm-wrap').toggle(policy !== 'never');
+				control.find('.em-prune-confirm-wrap').hide();
 				if (response.statusHistory) {
 					renderHistoryRows(response.statusHistory);
 				}
 				if (response.alertHistory) {
 					renderAlertHistoryRows(response.alertHistory);
 				}
+				markPruneApplied(button);
 				showMessage(response.message || 'History pruning policy saved.', 'success');
 			}).fail(function () {
 				showMessage('Unable to save pruning policy.', 'error');
 			}).always(function () {
-				button.prop('disabled', false);
+				button.removeData('endpointmonitor-prune-in-flight').prop('disabled', false);
 			});
 		});
 
-		$('.endpointmonitor').on('click', '.em-delete-status-history', function () {
+		root.off('click.endpointmonitorDeleteStatusHistory', '.em-delete-status-history').on('click.endpointmonitorDeleteStatusHistory', '.em-delete-status-history', function () {
 			var button = $(this);
 			var id = parseInt(button.data('history-id'), 10) || 0;
 			var token = endpointMonitorToken(root);
+			if (button.data('endpointmonitor-delete-in-flight')) {
+				return;
+			}
 			if (id <= 0 || !window.confirm('Permanently delete this Status History row?')) {
 				return;
 			}
@@ -401,7 +426,7 @@
 				return;
 			}
 
-			button.prop('disabled', true);
+			button.data('endpointmonitor-delete-in-flight', true).prop('disabled', true);
 			$.ajax({
 				url: 'ajax.php?module=endpointmonitor',
 				method: 'POST',
@@ -422,14 +447,17 @@
 			}).fail(function () {
 				showMessage('Unable to delete Status History row.', 'error');
 			}).always(function () {
-				button.prop('disabled', false);
+				button.removeData('endpointmonitor-delete-in-flight').prop('disabled', false);
 			});
 		});
 
-		$('.endpointmonitor').on('click', '.em-delete-alert-history', function () {
+		root.off('click.endpointmonitorDeleteAlertHistory', '.em-delete-alert-history').on('click.endpointmonitorDeleteAlertHistory', '.em-delete-alert-history', function () {
 			var button = $(this);
 			var id = parseInt(button.data('history-id'), 10) || 0;
 			var token = endpointMonitorToken(root);
+			if (button.data('endpointmonitor-delete-in-flight')) {
+				return;
+			}
 			if (id <= 0 || !window.confirm('Permanently delete this Alert History row?')) {
 				return;
 			}
@@ -438,7 +466,7 @@
 				return;
 			}
 
-			button.prop('disabled', true);
+			button.data('endpointmonitor-delete-in-flight', true).prop('disabled', true);
 			$.ajax({
 				url: 'ajax.php?module=endpointmonitor',
 				method: 'POST',
@@ -459,7 +487,7 @@
 			}).fail(function () {
 				showMessage('Unable to delete Alert History row.', 'error');
 			}).always(function () {
-				button.prop('disabled', false);
+				button.removeData('endpointmonitor-delete-in-flight').prop('disabled', false);
 			});
 		});
 	});

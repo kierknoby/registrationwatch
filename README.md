@@ -255,9 +255,9 @@ Admin UI:
 
 * Monitored endpoints can have short admin notes of up to 48 characters, saved inline with a timestamp.
 * Show selection is saved as a module setting and applies to the map and history tables.
-* History pruning policies default to Never. Daily, Monthly, and Yearly pruning,
-  plus single-row history deletion, permanently delete matching history rows
-  after explicit administrator confirmation.
+* History pruning policies default to Never. Hourly, Daily, Monthly, and Yearly
+  pruning, plus single-row history deletion, permanently delete matching history
+  rows after explicit administrator confirmation.
 * Endpoint Status Map shows a limited tile view by default, with Show options for
   6, 30, 60, 120, and All.
 * Endpoint detail displays source IP, source port, device, version, contact
@@ -322,8 +322,8 @@ Defaults:
 * Alert on unreachable enabled
 * Alert on not registered enabled
 * Alert on recovery enabled
-* Debounce seconds: `0`
-* Repeat suppression seconds: `0`
+* Debounce seconds: `0`, maximum `86400`
+* Repeat suppression seconds: `0`, maximum `86400`
 
 Alertable transitions:
 
@@ -391,7 +391,8 @@ Indexes:
 `endpointmonitor_settings` stores simple key/value settings, including alert
 configuration, UI Show limits, and history prune policies. The 1.1.0
 development prune settings are `status_history_prune_policy` and
-`alert_history_prune_policy`, and both default to `never`.
+`alert_history_prune_policy`, both default to `never`, and valid policies are
+`hourly`, `daily`, `monthly`, `yearly`, and `never`.
 
 `endpointmonitor_alert_history` stores one row per recipient and alert decision:
 
