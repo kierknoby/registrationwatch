@@ -13,7 +13,7 @@ namespace FreePBX\modules;
 class Endpointmonitor implements \BMO {
 
 	/** Fallback only. Authoritative version lives in module.xml. */
-	const VERSION = '1.0.1';
+	const VERSION = '1.1.0';
 
 	const STATUS_REACHABLE = 'Reachable';
 	const STATUS_UNREACHABLE = 'Unreachable';

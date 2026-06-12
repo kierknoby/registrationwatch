@@ -281,33 +281,36 @@ $_emAssetVer = max(
 
 	<div class="row em-section">
 		<div class="col-sm-12">
-			<div class="panel panel-default">
-				<div class="panel-heading">
-					<h3 class="panel-title"><?php echo _('Status History'); ?></h3>
-				</div>
-				<div class="panel-body">
-					<div class="em-prune-control" data-history-type="status">
-							<div class="form-inline">
-								<label for="em-status-prune-policy"><?php echo _('Prune'); ?></label>
-								<select id="em-status-prune-policy" class="form-control input-sm em-prune-policy">
-									<option value="never" <?php echo $statusPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
-									<option value="hourly" <?php echo $statusPrunePolicy === 'hourly' ? 'selected' : ''; ?>><?php echo _('Hourly'); ?></option>
-									<option value="daily" <?php echo $statusPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
-									<option value="monthly" <?php echo $statusPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
-									<option value="yearly" <?php echo $statusPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
-								</select>
-								<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
-							</div>
-						<label class="checkbox-inline em-prune-confirm-wrap" style="<?php echo $statusPrunePolicy === 'never' ? 'display:none;' : ''; ?>">
-							<input type="checkbox" class="em-prune-confirm">
-							<?php echo _('I understand this will permanently delete older Status History rows.'); ?>
-						</label>
+				<div class="panel panel-default">
+					<div class="panel-heading">
+						<h3 class="panel-title"><?php echo _('Status History'); ?></h3>
 					</div>
-					<?php if (empty($statusHistory)): ?>
-						<p class="em-placeholder em-history-empty"><?php echo _('No status transitions have been recorded yet.'); ?></p>
-					<?php else: ?>
-						<p class="em-placeholder em-history-empty" style="display:none;"><?php echo _('No status transitions have been recorded yet.'); ?></p>
-					<?php endif; ?>
+					<div class="panel-body">
+						<div class="em-history-control-row">
+							<div class="em-prune-control" data-history-type="status" data-active-policy="<?php echo htmlspecialchars($statusPrunePolicy, ENT_QUOTES, 'UTF-8'); ?>">
+								<div class="form-inline em-prune-inline">
+									<label for="em-status-prune-policy"><?php echo _('Prune'); ?></label>
+									<select id="em-status-prune-policy" class="form-control input-sm em-prune-policy">
+										<option value="never" <?php echo $statusPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
+										<option value="hourly" <?php echo $statusPrunePolicy === 'hourly' ? 'selected' : ''; ?>><?php echo _('Hourly'); ?></option>
+										<option value="daily" <?php echo $statusPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
+										<option value="monthly" <?php echo $statusPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
+										<option value="yearly" <?php echo $statusPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
+									</select>
+									<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
+								</div>
+								<label class="checkbox-inline em-prune-confirm-wrap" style="display:none;">
+									<input type="checkbox" class="em-prune-confirm">
+									<?php echo _('I understand this will permanently delete older Status History rows.'); ?>
+								</label>
+							</div>
+							<div class="em-history-show-slot" data-show-section="status-history"></div>
+						</div>
+						<?php if (empty($statusHistory)): ?>
+							<p class="em-placeholder em-history-empty"><?php echo _('No status transitions have been recorded yet.'); ?></p>
+						<?php else: ?>
+							<p class="em-placeholder em-history-empty" style="display:none;"><?php echo _('No status transitions have been recorded yet.'); ?></p>
+						<?php endif; ?>
 					<div class="table-responsive em-history-wrap" style="<?php echo empty($statusHistory) ? 'display:none;' : ''; ?>">
 						<table class="table table-striped table-condensed em-history">
 							<thead>
@@ -349,33 +352,36 @@ $_emAssetVer = max(
 
 	<div class="row em-section">
 		<div class="col-sm-12">
-			<div class="panel panel-default">
-				<div class="panel-heading">
-					<h3 class="panel-title"><?php echo _('Alert History'); ?></h3>
-				</div>
-				<div class="panel-body">
-					<div class="em-prune-control" data-history-type="alert">
-							<div class="form-inline">
-								<label for="em-alert-prune-policy"><?php echo _('Prune'); ?></label>
-								<select id="em-alert-prune-policy" class="form-control input-sm em-prune-policy">
-									<option value="never" <?php echo $alertPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
-									<option value="hourly" <?php echo $alertPrunePolicy === 'hourly' ? 'selected' : ''; ?>><?php echo _('Hourly'); ?></option>
-									<option value="daily" <?php echo $alertPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
-									<option value="monthly" <?php echo $alertPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
-									<option value="yearly" <?php echo $alertPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
-								</select>
-								<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
-							</div>
-						<label class="checkbox-inline em-prune-confirm-wrap" style="<?php echo $alertPrunePolicy === 'never' ? 'display:none;' : ''; ?>">
-							<input type="checkbox" class="em-prune-confirm">
-							<?php echo _('I understand this will permanently delete older Alert History rows.'); ?>
-						</label>
+				<div class="panel panel-default">
+					<div class="panel-heading">
+						<h3 class="panel-title"><?php echo _('Alert History'); ?></h3>
 					</div>
-					<?php if (empty($alertHistory)): ?>
-						<p class="em-placeholder em-alert-history-empty"><?php echo _('No alert attempts have been recorded yet.'); ?></p>
-					<?php else: ?>
-						<p class="em-placeholder em-alert-history-empty" style="display:none;"><?php echo _('No alert attempts have been recorded yet.'); ?></p>
-					<?php endif; ?>
+					<div class="panel-body">
+						<div class="em-history-control-row">
+							<div class="em-prune-control" data-history-type="alert" data-active-policy="<?php echo htmlspecialchars($alertPrunePolicy, ENT_QUOTES, 'UTF-8'); ?>">
+								<div class="form-inline em-prune-inline">
+									<label for="em-alert-prune-policy"><?php echo _('Prune'); ?></label>
+									<select id="em-alert-prune-policy" class="form-control input-sm em-prune-policy">
+										<option value="never" <?php echo $alertPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
+										<option value="hourly" <?php echo $alertPrunePolicy === 'hourly' ? 'selected' : ''; ?>><?php echo _('Hourly'); ?></option>
+										<option value="daily" <?php echo $alertPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
+										<option value="monthly" <?php echo $alertPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
+										<option value="yearly" <?php echo $alertPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
+									</select>
+									<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
+								</div>
+								<label class="checkbox-inline em-prune-confirm-wrap" style="display:none;">
+									<input type="checkbox" class="em-prune-confirm">
+									<?php echo _('I understand this will permanently delete older Alert History rows.'); ?>
+								</label>
+							</div>
+							<div class="em-history-show-slot" data-show-section="alert-history"></div>
+						</div>
+						<?php if (empty($alertHistory)): ?>
+							<p class="em-placeholder em-alert-history-empty"><?php echo _('No alert attempts have been recorded yet.'); ?></p>
+						<?php else: ?>
+							<p class="em-placeholder em-alert-history-empty" style="display:none;"><?php echo _('No alert attempts have been recorded yet.'); ?></p>
+						<?php endif; ?>
 					<div class="table-responsive em-alert-history-wrap" style="<?php echo empty($alertHistory) ? 'display:none;' : ''; ?>">
 						<table class="table table-striped table-condensed em-alert-history">
 							<thead>

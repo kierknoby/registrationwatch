@@ -332,28 +332,43 @@
 		});
 
 		function markPruneApplied(button) {
-			var originalText = button.data('endpointmonitor-prune-original-text');
 			var restoreTimer = button.data('endpointmonitor-prune-restore-timer');
-			if (!originalText) {
-				originalText = $.trim(button.text()) || 'Apply';
-				button.data('endpointmonitor-prune-original-text', originalText);
-			}
 			if (restoreTimer) {
 				window.clearTimeout(restoreTimer);
 			}
 
 			button.text('✓ Applied');
 			button.data('endpointmonitor-prune-restore-timer', window.setTimeout(function () {
-				button.text(originalText);
+				updatePruneControlState(button.closest('.em-prune-control'));
 				button.removeData('endpointmonitor-prune-restore-timer');
 			}, 3000));
 		}
 
+		function updatePruneControlState(control, resetConfirmation) {
+			if (resetConfirmation === undefined) {
+				resetConfirmation = true;
+			}
+			var selectedPolicy = String(control.find('.em-prune-policy').val() || 'never').toLowerCase();
+			var activePolicy = String(control.attr('data-active-policy') || 'never').toLowerCase();
+			var isActive = selectedPolicy === activePolicy;
+			var button = control.find('.em-apply-prune');
+
+			button.text(isActive ? 'Active' : 'Apply');
+			button.prop('disabled', isActive);
+			button.toggleClass('disabled', isActive);
+			if (resetConfirmation) {
+				control.find('.em-prune-confirm').prop('checked', false);
+			}
+			control.find('.em-prune-confirm-wrap').toggle(!isActive && selectedPolicy !== 'never');
+		}
+
+		$('.endpointmonitor .em-prune-control').each(function () {
+			updatePruneControlState($(this));
+		});
+
 		root.off('change.endpointmonitorPrune', '.em-prune-policy').on('change.endpointmonitorPrune', '.em-prune-policy', function () {
 			var control = $(this).closest('.em-prune-control');
-			var policy = String($(this).val() || 'never').toLowerCase();
-			control.find('.em-prune-confirm').prop('checked', false);
-			control.find('.em-prune-confirm-wrap').toggle(policy !== 'never');
+			updatePruneControlState(control);
 		});
 
 		root.off('click.endpointmonitorPrune', '.em-apply-prune').on('click.endpointmonitorPrune', '.em-apply-prune', function () {
@@ -361,10 +376,16 @@
 			var control = button.closest('.em-prune-control');
 			var historyType = control.data('history-type') || '';
 			var policy = String(control.find('.em-prune-policy').val() || 'never').toLowerCase();
+			var activePolicy = String(control.attr('data-active-policy') || 'never').toLowerCase();
 			var confirmed = control.find('.em-prune-confirm').is(':checked') ? 1 : 0;
 			var token = endpointMonitorToken(root);
+			var applied = false;
 
 			if (button.data('endpointmonitor-prune-in-flight')) {
+				return;
+			}
+			if (policy === activePolicy) {
+				updatePruneControlState(control);
 				return;
 			}
 			if (policy !== 'never' && !confirmed) {
@@ -402,12 +423,17 @@
 				if (response.alertHistory) {
 					renderAlertHistoryRows(response.alertHistory);
 				}
+				control.attr('data-active-policy', policy);
+				applied = true;
 				markPruneApplied(button);
 				showMessage(response.message || 'History pruning policy saved.', 'success');
 			}).fail(function () {
 				showMessage('Unable to save pruning policy.', 'error');
 			}).always(function () {
-				button.removeData('endpointmonitor-prune-in-flight').prop('disabled', false);
+				button.removeData('endpointmonitor-prune-in-flight');
+				if (!button.data('endpointmonitor-prune-restore-timer')) {
+					updatePruneControlState(control, applied);
+				}
 			});
 		});
 
@@ -634,11 +660,11 @@
                 return found;
         }
 
-        function installTableControls() {
-                [
-                        ['monitored', 'Monitored Endpoints'],
-                        ['status-history', 'Status History'],
-                        ['alert-history', 'Alert History']
+	        function installTableControls() {
+	                [
+	                        ['monitored', 'Monitored Endpoints'],
+	                        ['status-history', 'Status History'],
+	                        ['alert-history', 'Alert History']
                 ].forEach(function(item) {
                         var section = item[0];
                         var title = item[1];
@@ -649,13 +675,19 @@
                         }
 
                         var $table = $panel.find('table').first();
-                        if (!$table.length) {
-                                return;
-                        }
+	                        if (!$table.length) {
+	                                return;
+	                        }
 
-                        $table.before(controlHtml(section));
-                });
-        }
+	                        var $control = $(controlHtml(section));
+	                        var $slot = $panel.find('.em-history-show-slot[data-show-section="' + section + '"]').first();
+	                        if ($slot.length) {
+	                                $slot.empty().append($control);
+	                        } else {
+	                                $table.before($control);
+	                        }
+	                });
+	        }
 
         function syncControls(value) {
                 currentLimit = normaliseLimit(value);

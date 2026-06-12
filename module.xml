@@ -2,11 +2,12 @@
 	<rawname>endpointmonitor</rawname>
 	<repo>unsupported</repo>
 	<name>EndPoint Monitor</name>
-	<version>1.0.1</version>
+	<version>1.1.0</version>
 	<publisher>20tele.com</publisher>
 	<license>GPLv3+</license>
 	<licenselink>http://www.gnu.org/licenses/gpl-3.0.txt</licenselink>
 	<changelog>
+		*1.1.0* Adds history pruning and single-row history deletion with page-load safety and CSRF hardening.
 		*1.0.1* Fixes alert send reservation, duplicate Test Email binding risk, source labels, and release wording.
 		*1.0.0* Adds reconciliation-driven email alert settings and per-recipient alert history using the FreePBX Job system.
 		*0.2.2* Adds transition-based status history during reconciliation without alerting.
