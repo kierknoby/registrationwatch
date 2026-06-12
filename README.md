@@ -2,7 +2,9 @@
 
 ## Development Branch
 
-The `1-1-0_dev` branch is carrying unreleased 1.1.0 development work. History pruning, single-row history deletion, read-only initial page rendering, and CSRF-safe page-load AJAX handling are under development here and are not released 1.1.0 features yet.
+The `1-1-0_rc7` branch is a release-candidate branch for EndPoint Monitor 1.1.0, based on the stable 1.0.1 release.
+
+It includes unreleased 1.1.0 work for history pruning, single-row history deletion, read-only page loading and auto-refresh, module-owned session CSRF protection for AJAX, hourly/daily/monthly/yearly pruning policies, capped alert timing fields, improved pruning controls, responsive history layout, friendlier history labels, and corrected endpoint address display with Device IP shown separately from Seen by Asterisk.
 
 **Development branch warning:** `1-1-0_dev` is not safe to install or test yet. Use the `main` branch for the current stable 1.0.1 release.
 
@@ -260,8 +262,8 @@ Admin UI:
   rows after explicit administrator confirmation.
 * Endpoint Status Map shows a limited tile view by default, with Show options for
   6, 30, 60, 120, and All.
-* Endpoint detail displays source IP, source port, device, version, contact
-  expiry, qualify frequency, and latency where available.
+* Endpoint detail displays device IP, device port, the address seen by Asterisk,
+  device, version, contact expiry, qualify frequency, and latency where available.
 * Temporary action messages appear as fading overlay messages so they remain visible on long pages.
 * Warning banners appear where alert configuration cannot support delivery.
 

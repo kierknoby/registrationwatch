@@ -132,8 +132,9 @@ $_emAssetVer = max(
 										</div>
 										<div class="em-map-description"><?php echo htmlspecialchars($endpoint['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-status"><?php echo htmlspecialchars($endpoint['last_known_status'] ?: 'Unknown', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Source IP'); ?>: <?php echo htmlspecialchars(($endpoint['source_ip'] ?? '') !== '' ? (string)$endpoint['source_ip'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Source Port'); ?>: <?php echo htmlspecialchars(($endpoint['source_port'] ?? '') !== '' ? (string)$endpoint['source_port'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="em-map-detail"><?php echo _('Device IP'); ?>: <?php echo htmlspecialchars(($endpoint['device_ip'] ?? '') !== '' ? (string)$endpoint['device_ip'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="em-map-detail"><?php echo _('Device Port'); ?>: <?php echo htmlspecialchars(($endpoint['device_port'] ?? '') !== '' ? (string)$endpoint['device_port'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="em-map-detail"><?php echo _('Seen by Asterisk'); ?>: <?php echo htmlspecialchars(($endpoint['seen_by_asterisk'] ?? '') !== '' ? (string)$endpoint['seen_by_asterisk'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Device'); ?>: <?php echo htmlspecialchars(($endpoint['device_name'] ?? '') !== '' ? (string)$endpoint['device_name'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Version'); ?>: <?php echo htmlspecialchars(($endpoint['firmware_version'] ?? '') !== '' ? (string)$endpoint['firmware_version'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Contact expires'); ?>: <?php echo htmlspecialchars(($endpoint['contact_expires_at'] ?? '') !== '' ? (string)$endpoint['contact_expires_at'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
@@ -427,7 +428,9 @@ $_emAssetVer = max(
 	// Endpoint map renderer. Auto-refresh uses the read-only topology AJAX path in endpointmonitor.js.
 	(function() {
 		const textNoEndpoints = <?php echo json_encode(_('No endpoints discovered yet. Use Manual Refresh to discover endpoints.')); ?>;
-		const textSourceIp = <?php echo json_encode(_('Source IP')); ?>;
+		const textDeviceIp = <?php echo json_encode(_('Device IP')); ?>;
+		const textDevicePort = <?php echo json_encode(_('Device Port')); ?>;
+		const textSeenByAsterisk = <?php echo json_encode(_('Seen by Asterisk')); ?>;
 		const textLatency = <?php echo json_encode(_('Latency')); ?>;
 		const textNoQualify = <?php echo json_encode(_('Unavailable; qualify is not enabled.')); ?>;
 		let latestMapEndpoints = <?php echo json_encode($mapEndpoints); ?>;
@@ -512,8 +515,9 @@ $_emAssetVer = max(
 				html += '<div class="em-map-title"><span class="em-led ' + statusClass(status) + '"></span><code>' + escapeHtml(endpoint.extension) + '</code></div>';
 				html += '<div class="em-map-description">' + escapeHtml(endpoint.description || '-') + '</div>';
 				html += '<div class="em-map-status">' + escapeHtml(status) + '</div>';
-				html += '<div class="em-map-detail">' + escapeHtml(textSourceIp) + ': ' + escapeHtml(endpoint.source_ip || '-') + '</div>';
-				html += '<div class="em-map-detail">Source Port: ' + escapeHtml(endpoint.source_port || '-') + '</div>';
+				html += '<div class="em-map-detail">' + escapeHtml(textDeviceIp) + ': ' + escapeHtml(endpoint.device_ip || '-') + '</div>';
+				html += '<div class="em-map-detail">' + escapeHtml(textDevicePort) + ': ' + escapeHtml(endpoint.device_port || '-') + '</div>';
+				html += '<div class="em-map-detail">' + escapeHtml(textSeenByAsterisk) + ': ' + escapeHtml(endpoint.seen_by_asterisk || '-') + '</div>';
 				html += '<div class="em-map-detail">Device: ' + escapeHtml(endpoint.device_name || '-') + '</div>';
 				html += '<div class="em-map-detail">Version: ' + escapeHtml(endpoint.firmware_version || '-') + '</div>';
 				html += '<div class="em-map-detail">Contact expires: ' + escapeHtml(endpoint.contact_expires_at || '-') + '</div>';

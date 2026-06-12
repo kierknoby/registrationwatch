@@ -980,8 +980,9 @@ class Endpointmonitor implements \BMO {
 			}
 		}
 
-		// Extract source IP from contact URI (e.g., "sip:200@192.168.1.100:5061" -> "192.168.1.100")
-		$sourceIp = $this->extractSourceIpFromContactUri($contactUri);
+		$contactAddress = $this->parseContactUriAddress($contactUri);
+		$contactHost = $contactAddress['host'];
+		$sourceIp = $contactHost !== null && filter_var($contactHost, FILTER_VALIDATE_IP) ? $contactHost : null;
 
 		return [
 			'extension' => $extension,
@@ -994,23 +995,60 @@ class Endpointmonitor implements \BMO {
 		];
 	}
 
-	private function extractSourceIpFromContactUri(?string $contactUri): ?string {
-		if ($contactUri === null || $contactUri === '') {
-			return null;
+	private function parseContactUriAddress(?string $contactUri): array {
+		$result = ['host' => null, 'port' => null];
+		$contactUri = trim((string)$contactUri);
+		if ($contactUri === '') {
+			return $result;
+		}
+		if (preg_match('/\s/', $contactUri)) {
+			return $result;
 		}
 
-		// Parse contact URI to extract IP address
-		// Expected format: sip:user@host:port or sips:user@host:port or similar
-		// We want to extract the host part
-		if (preg_match('/@([^:\/\?\#]+)/', $contactUri, $matches)) {
-			$host = $matches[1];
-			// Check if it's an IP address (IPv4 or IPv6)
-			if (filter_var($host, FILTER_VALIDATE_IP)) {
-				return $host;
+		$contactUri = trim($contactUri, '<>');
+		$atPosition = strrpos($contactUri, '@');
+		$hostPort = $atPosition === false ? $contactUri : substr($contactUri, $atPosition + 1);
+		$hostPort = preg_split('/[;?\#>\s]/', $hostPort, 2)[0] ?? '';
+		$hostPort = trim($hostPort);
+		if ($hostPort === '') {
+			return $result;
+		}
+
+		if (strpos($hostPort, ':') !== false && stripos($hostPort, 'sip:') === 0) {
+			$hostPort = substr($hostPort, strpos($hostPort, ':') + 1);
+		}
+
+		$host = null;
+		$port = null;
+		if (preg_match('/^\[([^\]]+)\](?::([0-9]+))?$/', $hostPort, $matches)) {
+			$host = trim($matches[1]);
+			$port = $matches[2] ?? null;
+		} elseif (substr_count($hostPort, ':') === 1 && preg_match('/^([^:]+):([0-9]+)$/', $hostPort, $matches)) {
+			$host = trim($matches[1]);
+			$port = $matches[2];
+		} elseif (substr_count($hostPort, ':') === 0) {
+			$host = $hostPort;
+		} else {
+			$host = $hostPort;
+		}
+
+		$host = trim((string)$host, " \t\n\r\0\x0B[]");
+		if ($host === '') {
+			return $result;
+		}
+		if (!filter_var($host, FILTER_VALIDATE_IP) && !preg_match('/^[A-Za-z0-9.-]+$/', $host)) {
+			return $result;
+		}
+
+		$result['host'] = $host;
+		if ($port !== null && ctype_digit((string)$port)) {
+			$portNumber = (int)$port;
+			if ($portNumber > 0 && $portNumber <= 65535) {
+				$result['port'] = $portNumber;
 			}
 		}
 
-		return null;
+		return $result;
 	}
 
 	private function isAsteriskStatus(string $value): bool {
@@ -1492,7 +1530,12 @@ class Endpointmonitor implements \BMO {
 			ORDER BY extension'
 		);
 
-		return $stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [];
+		$rows = $stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [];
+		if (!is_array($rows)) {
+			return [];
+		}
+
+		return array_map([$this, 'withEndpointDisplayAddress'], $rows);
 	}
 
 	private function getEndpointMapRows(): array {
@@ -1509,6 +1552,9 @@ class Endpointmonitor implements \BMO {
 				'contact_uri' => $endpoint['contact_uri'],
 				'source_ip' => $endpoint['source_ip'],
 				'source_port' => $endpoint['source_port'] ?? null,
+				'device_ip' => $endpoint['device_ip'] ?? null,
+				'device_port' => $endpoint['device_port'] ?? null,
+				'seen_by_asterisk' => $endpoint['seen_by_asterisk'] ?? null,
 				'user_agent' => $endpoint['user_agent'] ?? null,
 				'device_name' => $endpoint['device_name'] ?? null,
 				'firmware_version' => $endpoint['firmware_version'] ?? null,
@@ -1731,7 +1777,35 @@ class Endpointmonitor implements \BMO {
 		$stmt->execute([':extension' => $extension]);
 
 		$row = $stmt->fetch(\PDO::FETCH_ASSOC);
-		return is_array($row) ? $row : [];
+		return is_array($row) ? $this->withEndpointDisplayAddress($row) : [];
+	}
+
+	private function withEndpointDisplayAddress(array $endpoint): array {
+		$contactAddress = $this->parseContactUriAddress($endpoint['contact_uri'] ?? null);
+		$endpoint['device_ip'] = $contactAddress['host'];
+		$endpoint['device_port'] = $contactAddress['port'];
+		$endpoint['seen_by_asterisk'] = $this->formatSeenByAsterisk(
+			$endpoint['source_ip'] ?? null,
+			$endpoint['source_port'] ?? null
+		);
+
+		return $endpoint;
+	}
+
+	private function formatSeenByAsterisk($sourceIp, $sourcePort): ?string {
+		$sourceIp = trim((string)$sourceIp);
+		if ($sourceIp === '') {
+			return null;
+		}
+
+		if ($sourcePort !== null && $sourcePort !== '' && is_numeric($sourcePort)) {
+			$port = (int)$sourcePort;
+			if ($port > 0 && $port <= 65535) {
+				return $sourceIp . ':' . $port;
+			}
+		}
+
+		return $sourceIp;
 	}
 
 	private function buildAlertEmail(array $transition, string $alertType): array {
@@ -1762,8 +1836,9 @@ class Endpointmonitor implements \BMO {
 			'Endpoint details',
 			'Device: ' . ($deviceName !== '' ? $deviceName : 'Unknown'),
 			'Version: ' . ($firmwareVersion !== '' ? $firmwareVersion : 'Unknown'),
-			'Source IP: ' . (($endpointDetails['source_ip'] ?? '') !== '' ? $endpointDetails['source_ip'] : 'Unknown'),
-			'Source Port: ' . (($endpointDetails['source_port'] ?? '') !== '' ? $endpointDetails['source_port'] : 'Unknown'),
+			'Device IP: ' . (($endpointDetails['device_ip'] ?? '') !== '' ? $endpointDetails['device_ip'] : 'Unknown'),
+			'Device Port: ' . (($endpointDetails['device_port'] ?? '') !== '' ? $endpointDetails['device_port'] : 'Unknown'),
+			'Seen by Asterisk: ' . (($endpointDetails['seen_by_asterisk'] ?? '') !== '' ? $endpointDetails['seen_by_asterisk'] : 'Unknown'),
 			'Contact expires: ' . (($endpointDetails['contact_expires_at'] ?? '') !== '' ? $endpointDetails['contact_expires_at'] : 'Unknown'),
 			'Qualify frequency: ' . (($endpointDetails['qualify_frequency'] ?? '') !== '' ? $endpointDetails['qualify_frequency'] . ' seconds' : 'Unknown'),
 			'Last checked: ' . (($endpointDetails['last_checked_at'] ?? '') !== '' ? $endpointDetails['last_checked_at'] : 'Unknown'),
