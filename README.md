@@ -1,20 +1,16 @@
 # EndPoint Monitor for FreePBX 17
 
-## Development Branch
-
-The `1-1-0_rc7` branch is a release-candidate branch for EndPoint Monitor 1.1.0, based on the stable 1.0.1 release.
-
-It includes unreleased 1.1.0 work for history pruning, single-row history deletion, read-only page loading and auto-refresh, module-owned session CSRF protection for AJAX, hourly/daily/monthly/yearly pruning policies, capped alert timing fields, improved pruning controls, responsive history layout, friendlier history labels, and corrected endpoint address display using Device IP and Device Port derived from the SIP Contact URI.
-
-**Development branch warning:** `1-1-0_dev` is not safe to install or test yet. Use the `main` branch for the current stable 1.0.1 release.
-
 ## Current Release
 
-Patch release: 1.0.1, released at 18:45 on 11 June 2026.
+Minor release: 1.1.0, released at 21:00 on 12 June 2026.
 
 ## Version Update
 
-From 1.0.0 to 1.0.1 on 11th June 2026 by kierknoby
+Minor release from 1.0.1 to 1.1.0 on 12 June 2026 by kierknoby
+
+Adds configurable Status History and Alert History pruning with Never, Hourly, Daily, Monthly, and Yearly policies, adds confirmed single-row history deletion, makes initial page rendering and endpoint map auto-refresh read-only, adds module-owned session CSRF protection for AJAX, caps alert timing fields to 0-86400 seconds, improves pruning Apply/Active UI, improves responsive history controls, adds friendlier history labels, corrects endpoint address display by deriving Device IP and Device Port from the SIP Contact URI, and removes misleading/noisy Asterisk source details from default endpoint and alert output.
+
+Patch release from 1.0.0 to 1.0.1 on 11 June 2026 by kierknoby
 
 Fixes alert send reservation to prevent duplicate normal alert emails, prevents
 duplicate Test Email click binding, removes duplicate notes autosave handling,
@@ -48,7 +44,7 @@ probe service.
 
 ## Installation
 
-Pick whichever path fits. The module is currently unsigned/unsupported.
+Pick whichever path fits. The module is currently unsigned and community-supported.
 
 ### Option 1: Existing module directory
 
@@ -102,7 +98,7 @@ fwconsole ma list | grep -i endpointmonitor
 Expected output includes the installed version and enabled state, for example:
 
 ```text
-| endpointmonitor     | 1.0.1      | Enabled | GPLv3+      | Unsigned  |
+| endpointmonitor     | 1.1.0      | Enabled | GPLv3+      | Unsigned  |
 ```
 
 You can also check the module file directly:
@@ -214,10 +210,9 @@ fwconsole job --run=<job_id> --force
 
 * AJAX commands use a fixed command allowlist.
 * Current AJAX commands are `refresh`, `setenabled`, `savenotes`,
-  `saveshowlimit`, `savealerts`, `savetopology`, `testemail`, and
-  `gettopology`. The 1.1.0 development branch also includes fixed prune/delete
-  commands for Status History and Alert History.
-* AJAX handlers require a FreePBX CSRF token.
+  `saveshowlimit`, `savealerts`, `savetopology`, `testemail`, `gettopology`,
+  `saveprunepolicy`, `deletestatushistoryrow`, and `deletealerthistoryrow`.
+* AJAX handlers require a module-owned session CSRF token.
 * SQL writes and history deletes use prepared statements.
 * Asterisk access is read-only in this phase.
 * No shell execution is used by the module.
@@ -262,8 +257,8 @@ Admin UI:
   rows after explicit administrator confirmation.
 * Endpoint Status Map shows a limited tile view by default, with Show options for
   6, 30, 60, 120, and All.
-* Endpoint detail displays device IP, device port, the address seen by Asterisk,
-  device, version, contact expiry, qualify frequency, and latency where available.
+* Endpoint detail displays device IP, device port, device, version, contact
+  expiry, qualify frequency, and latency where available.
 * Temporary action messages appear as fading overlay messages so they remain visible on long pages.
 * Warning banners appear where alert configuration cannot support delivery.
 
@@ -391,10 +386,10 @@ Indexes:
 * `source`
 
 `endpointmonitor_settings` stores simple key/value settings, including alert
-configuration, UI Show limits, and history prune policies. The 1.1.0
-development prune settings are `status_history_prune_policy` and
-`alert_history_prune_policy`, both default to `never`, and valid policies are
-`hourly`, `daily`, `monthly`, `yearly`, and `never`.
+configuration, UI Show limits, and history prune policies. The history prune
+settings are `status_history_prune_policy` and `alert_history_prune_policy`,
+both default to `never`, and valid policies are `hourly`, `daily`, `monthly`,
+`yearly`, and `never`.
 
 `endpointmonitor_alert_history` stores one row per recipient and alert decision:
 
