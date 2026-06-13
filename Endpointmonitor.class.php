@@ -19,7 +19,7 @@ class Endpointmonitor implements \BMO {
 	const STATUS_UNREACHABLE = 'Unreachable';
 	const STATUS_REGISTERED_NO_QUALIFY = 'Registered (No Qualify)';
 	const STATUS_UNKNOWN = 'Unknown';
-	const STATUS_NOT_REGISTERED = 'Not Registered';
+	const STATUS_NOT_REGISTERED = 'Not registered';
 	const CSRF_SESSION_KEY = 'endpointmonitor_csrf_token';
 	const ALERT_TIMING_MAX_SECONDS = 86400;
 	const ALERT_STALE_TRANSITION_MAX_SECONDS = 300;
