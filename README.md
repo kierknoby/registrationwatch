@@ -344,10 +344,10 @@ Alert emails include a reminder that email delivery can be delayed and that
 current status should be checked in the FreePBX module.
 
 Endpoint alert emails show both Device and Network address details where
-available. Device IP and Device Port are derived from the SIP Contact URI
-advertised by the endpoint. Network IP and Network Port are derived from the
-network-side registration details recorded by Asterisk, such as the original
-host or registrar metadata where available.
+available. When the SIP Contact URI includes the original host, Device IP and
+Device Port are derived from that endpoint-advertised address. Network IP and
+Network Port are derived from the SIP Contact URI address used for the
+registration path, falling back to registrar metadata where available.
 
 For Not Registered / Contact removed alerts, the module uses historical labels,
 such as Last Device IP, Last Device Port, Last Network IP, and Last Network
