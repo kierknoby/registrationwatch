@@ -17,7 +17,7 @@ class Endpointmonitor implements \BMO {
 
 	const STATUS_REACHABLE = 'Reachable';
 	const STATUS_UNREACHABLE = 'Unreachable';
-	const STATUS_REGISTERED_NO_QUALIFY = 'Registered (No Qualify)';
+	const STATUS_REGISTERED_NO_QUALIFY = 'Registered (no qualify)';
 	const STATUS_UNKNOWN = 'Unknown';
 	const STATUS_NOT_REGISTERED = 'Not registered';
 	const CSRF_SESSION_KEY = 'endpointmonitor_csrf_token';
@@ -814,7 +814,7 @@ class Endpointmonitor implements \BMO {
 				continue;
 			}
 
-			$previousStatus = (string)$endpoint['last_known_status'];
+			$previousStatus = $this->normaliseState($endpoint['last_known_status'] ?? self::STATUS_UNKNOWN);
 			$previousContactUri = $endpoint['contact_uri'] ?? null;
 			$previousHadContact = $this->hadRegisteredState($previousStatus) || (string)($endpoint['contact_uri'] ?? '') !== '';
 			$contact = $contacts[$endpoint['extension']] ?? null;
@@ -1159,6 +1159,8 @@ class Endpointmonitor implements \BMO {
 	}
 
 	private function statusRank(string $status): int {
+		$status = $this->normaliseState($status);
+
 		switch ($status) {
 			case self::STATUS_REACHABLE:
 				return 5;
@@ -1176,7 +1178,7 @@ class Endpointmonitor implements \BMO {
 	}
 
 	private function hadRegisteredState(string $status): bool {
-		return in_array($status, [
+		return in_array($this->normaliseState($status), [
 			self::STATUS_REACHABLE,
 			self::STATUS_UNREACHABLE,
 			self::STATUS_REGISTERED_NO_QUALIFY,
@@ -1184,7 +1186,7 @@ class Endpointmonitor implements \BMO {
 	}
 
 	private function historyReason(bool $previousHadContact, string $newStatus): string {
-		if ($newStatus === self::STATUS_NOT_REGISTERED && $previousHadContact) {
+		if ($this->normaliseState($newStatus) === self::STATUS_NOT_REGISTERED && $previousHadContact) {
 			return 'removed';
 		}
 
@@ -1407,8 +1409,8 @@ class Endpointmonitor implements \BMO {
 	}
 
 	private function alertTypeForTransition(array $transition, array $settings): ?string {
-		$from = (string)($transition['from_state'] ?? '');
-		$to = (string)$transition['to_state'];
+		$from = $this->normaliseState($transition['from_state'] ?? '');
+		$to = $this->normaliseState($transition['to_state'] ?? '');
 		if ($from === '' || $from === self::STATUS_UNKNOWN) {
 			return null;
 		}
@@ -1914,7 +1916,7 @@ class Endpointmonitor implements \BMO {
 
 	private function buildAlertEmail(array $transition, string $alertType): array {
 		$extension = (string)$transition['extension'];
-		$toState = (string)$transition['to_state'];
+		$toState = $this->normaliseState($transition['to_state'] ?? '');
 		$subjectStatus = $this->stateLabel($toState);
 		if ($alertType === 'recovery') {
 			$subjectStatus = 'has recovered';
@@ -2288,18 +2290,24 @@ class Endpointmonitor implements \BMO {
 	}
 
 	private function stateLabel(?string $state): string {
+		$state = $this->normaliseState($state);
+
+		return $state !== '' ? $state : '-';
+	}
+
+	private function normaliseState($state): string {
 		$state = trim((string)$state);
 
 		switch (strtolower($state)) {
 			case 'not_registered':
 			case 'not registered':
-				return 'Not registered';
+				return self::STATUS_NOT_REGISTERED;
 			case 'registered_no_qualify':
 			case 'registered (no qualify)':
-				return 'Registered (no qualify)';
+				return self::STATUS_REGISTERED_NO_QUALIFY;
 		}
 
-		return $state !== '' ? $state : '-';
+		return $state;
 	}
 
 	private function now(): string {

@@ -102,7 +102,7 @@
 			rows.find('.em-last-checked').text(endpoint.last_checked_at || '-');
 			if (endpoint.latency_ms) {
 				rows.find('.em-latency').text(endpoint.latency_ms + ' ms');
-			} else if (status === 'Registered (No Qualify)') {
+			} else if (status === 'Registered (no qualify)') {
 				rows.find('.em-latency').text('Unavailable; qualify is not enabled.');
 			} else {
 				rows.find('.em-latency').text('-');

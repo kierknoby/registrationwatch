@@ -57,11 +57,11 @@ $_emStatusClass = function ($status) {
 	switch ((string)$status) {
 		case 'Reachable':
 			return 'em-led-green';
-		case 'Registered (No Qualify)':
+		case 'Registered (no qualify)':
 			return 'em-led-amber';
 		case 'Unreachable':
 			return 'em-led-red';
-		case 'Not Registered':
+		case 'Not registered':
 			return 'em-led-grey';
 		case 'Unknown':
 		default:
@@ -195,7 +195,7 @@ $_emAssetVer = max(
 											<?php echo _('Latency'); ?>:
 											<?php if ($endpoint['latency_ms'] !== null && $endpoint['latency_ms'] !== ''): ?>
 												<?php echo htmlspecialchars((string)$endpoint['latency_ms'], ENT_QUOTES, 'UTF-8'); ?> ms
-											<?php elseif ($endpoint['last_known_status'] === 'Registered (No Qualify)'): ?>
+											<?php elseif ($endpoint['last_known_status'] === 'Registered (no qualify)'): ?>
 												<?php echo _('Unavailable; qualify is not enabled.'); ?>
 											<?php else: ?>
 												-
@@ -494,11 +494,11 @@ $_emAssetVer = max(
 			switch (status || 'Unknown') {
 				case 'Reachable':
 					return 'em-led-green';
-				case 'Registered (No Qualify)':
+				case 'Registered (no qualify)':
 					return 'em-led-amber';
 				case 'Unreachable':
 					return 'em-led-red';
-				case 'Not Registered':
+				case 'Not registered':
 					return 'em-led-grey';
 				case 'Unknown':
 				default:
@@ -510,7 +510,7 @@ $_emAssetVer = max(
 			if (endpoint.latency_ms !== null && endpoint.latency_ms !== undefined && endpoint.latency_ms !== '') {
 				return escapeHtml(endpoint.latency_ms) + ' ms';
 			}
-			if (status === 'Registered (No Qualify)') {
+			if (status === 'Registered (no qualify)') {
 				return textNoQualify;
 			}
 			return '-';
