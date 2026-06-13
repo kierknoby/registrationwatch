@@ -69,6 +69,25 @@ $_emStatusClass = function ($status) {
 	}
 };
 
+$_emContactExpiryText = function ($expiresAt) {
+	$expiresAt = trim((string)$expiresAt);
+	if ($expiresAt === '') {
+		return _('Unknown');
+	}
+
+	$expiryTimestamp = strtotime($expiresAt);
+	if ($expiryTimestamp === false) {
+		return _('Unknown');
+	}
+
+	$remainingSeconds = $expiryTimestamp - time();
+	if ($remainingSeconds < 0) {
+		return _('Expired');
+	}
+
+	return (string)$remainingSeconds . 's';
+};
+
 $_emAssetVer = max(
 	@filemtime(__DIR__ . '/../assets/js/endpointmonitor.js') ?: 0,
 	@filemtime(__DIR__ . '/../assets/css/endpointmonitor.css') ?: 0
@@ -138,7 +157,7 @@ $_emAssetVer = max(
 										<div class="em-map-detail"><?php echo _('Network Port'); ?>: <?php echo htmlspecialchars(($endpoint['network_port'] ?? '') !== '' ? (string)$endpoint['network_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Device'); ?>: <?php echo htmlspecialchars(($endpoint['device_name'] ?? '') !== '' ? (string)$endpoint['device_name'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Version'); ?>: <?php echo htmlspecialchars(($endpoint['firmware_version'] ?? '') !== '' ? (string)$endpoint['firmware_version'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Contact expires'); ?>: <?php echo htmlspecialchars(($endpoint['contact_expires_at'] ?? '') !== '' ? (string)$endpoint['contact_expires_at'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="em-map-detail"><?php echo _('Contact expires'); ?>: <?php echo htmlspecialchars($_emContactExpiryText($endpoint['contact_expires_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Qualify'); ?>: <?php echo htmlspecialchars(($endpoint['qualify_frequency'] ?? '') !== '' ? (string)$endpoint['qualify_frequency'] . ' seconds' : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail">
 											<?php echo _('Latency'); ?>:
@@ -436,6 +455,7 @@ $_emAssetVer = max(
 		const textLatency = <?php echo json_encode(_('Latency')); ?>;
 		const textNoQualify = <?php echo json_encode(_('Unavailable; qualify is not enabled.')); ?>;
 		const textUnknown = <?php echo json_encode(_('Unknown')); ?>;
+		const textExpired = <?php echo json_encode(_('Expired')); ?>;
 		let latestMapEndpoints = <?php echo json_encode($mapEndpoints); ?>;
 
 		function statusClass(status) {
@@ -462,6 +482,24 @@ $_emAssetVer = max(
 				return textNoQualify;
 			}
 			return '-';
+		}
+
+		function contactExpiryText(expiresAt) {
+			if (!expiresAt) {
+				return textUnknown;
+			}
+
+			const expiryTime = Date.parse(String(expiresAt).replace(' ', 'T'));
+			if (Number.isNaN(expiryTime)) {
+				return textUnknown;
+			}
+
+			const remainingSeconds = Math.floor((expiryTime - Date.now()) / 1000);
+			if (remainingSeconds < 0) {
+				return textExpired;
+			}
+
+			return remainingSeconds + 's';
 		}
 
 		function discoveredEndpoints(endpoints) {
@@ -524,7 +562,7 @@ $_emAssetVer = max(
 				html += '<div class="em-map-detail">' + escapeHtml(textNetworkPort) + ': ' + escapeHtml(endpoint.network_port || textUnknown) + '</div>';
 				html += '<div class="em-map-detail">Device: ' + escapeHtml(endpoint.device_name || '-') + '</div>';
 				html += '<div class="em-map-detail">Version: ' + escapeHtml(endpoint.firmware_version || '-') + '</div>';
-				html += '<div class="em-map-detail">Contact expires: ' + escapeHtml(endpoint.contact_expires_at || '-') + '</div>';
+				html += '<div class="em-map-detail">Contact expires: ' + escapeHtml(contactExpiryText(endpoint.contact_expires_at)) + '</div>';
 				html += '<div class="em-map-detail">Qualify: ' + escapeHtml(endpoint.qualify_frequency ? endpoint.qualify_frequency + ' seconds' : '-') + '</div>';
 				html += '<div class="em-map-detail">' + escapeHtml(textLatency) + ': ' + latencyText(endpoint, status) + '</div>';
 				html += '</div>';

@@ -8,7 +8,7 @@ Patch release: 1.1.1, released on 13 June 2026.
 
 Patch release from 1.1.0 to 1.1.1 on 13 June 2026 by kierknoby
 
-Fixes stale endpoint alert backlog replay by only sending alerts for fresh post-debounce transitions, requiring endpoint alert candidates to still be selected, aligning duplicate alert checks with alert type, updating alert email wording to describe the transition rather than presenting old history as current status, and showing Device and Network address details while preserving last-known address details for Not Registered alerts where available.
+Fixes stale endpoint alert backlog replay by only sending alerts for fresh post-debounce transitions, requiring endpoint alert candidates to still be selected, aligning duplicate alert checks with alert type, updating alert email wording to describe the transition rather than presenting old history as current status, showing Device and Network address details while preserving last-known address details for Not Registered alerts where available, and displaying endpoint card contact expiry as a compact countdown.
 
 Minor release from 1.0.1 to 1.1.0 on 12 June 2026 by kierknoby
 
