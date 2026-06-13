@@ -22,6 +22,7 @@ class Endpointmonitor implements \BMO {
 	const STATUS_NOT_REGISTERED = 'Not Registered';
 	const CSRF_SESSION_KEY = 'endpointmonitor_csrf_token';
 	const ALERT_TIMING_MAX_SECONDS = 86400;
+	const ALERT_STALE_TRANSITION_MAX_SECONDS = 300;
 
 	private $settingsDefaults = [
 		'alert_enabled' => '0',
@@ -1247,17 +1248,27 @@ class Endpointmonitor implements \BMO {
 		try {
 			$debounceSeconds = min(self::ALERT_TIMING_MAX_SECONDS, max(0, (int)$settings['debounce_seconds']));
 			$cutoff = date('Y-m-d H:i:s', strtotime($now) - $debounceSeconds);
+			// Endpoint alerts are allowed only for fresh eligible transitions.
+			// The stale window is debounce_seconds plus 300 seconds, so old
+			// status-history rows cannot be replayed later after recipient or
+			// settings changes, while legitimate debounce delays still work.
+			$staleCutoff = date('Y-m-d H:i:s', strtotime($now) - ($debounceSeconds + self::ALERT_STALE_TRANSITION_MAX_SECONDS));
 			$stmt = $this->db()->prepare(
 				'SELECT h.id, h.extension, h.from_state, h.to_state, h.source, h.reason, h.contact_uri, h.latency_ms, h.created_at
 				FROM endpointmonitor_status_history h
+				JOIN endpointmonitor_endpoints e
+					ON e.extension = h.extension
 				WHERE h.source = :source
 					AND h.created_at <= :cutoff
+					AND h.created_at >= :stale_cutoff
+					AND e.enabled = 1
 				ORDER BY h.created_at ASC, h.id ASC
 				LIMIT 100'
 			);
 			$stmt->execute([
 				':source' => 'reconcile',
 				':cutoff' => $cutoff,
+				':stale_cutoff' => $staleCutoff,
 			]);
 
 			foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $transition) {
@@ -1267,7 +1278,7 @@ class Endpointmonitor implements \BMO {
 				}
 
 				foreach ($recipients as $recipient) {
-					if ($this->hasSentAlertForRecipient((int)$transition['id'], $recipient)) {
+					if ($this->hasRecordedAlertForRecipient((int)$transition['id'], $alertType, $recipient)) {
 						continue;
 					}
 
@@ -1344,15 +1355,17 @@ class Endpointmonitor implements \BMO {
 		return null;
 	}
 
-        private function hasSentAlertForRecipient(int $historyId, string $recipient): bool {
+        private function hasRecordedAlertForRecipient(int $historyId, string $alertType, string $recipient): bool {
                 $stmt = $this->db()->prepare(
                         'SELECT COUNT(*)
                         FROM endpointmonitor_alert_history
                         WHERE history_id = :history_id
+                                AND alert_type = :alert_type
                                 AND recipient = :recipient'
                 );
                 $stmt->execute([
                         ':history_id' => $historyId,
+                        ':alert_type' => $alertType,
                         ':recipient' => $recipient,
                 ]);
 
@@ -1829,7 +1842,7 @@ class Endpointmonitor implements \BMO {
 			'EndPoint Monitor state change',
 			'',
 			'Endpoint: ' . $extension,
-			'Current state: ' . $toState,
+			'New state: ' . $toState,
 			'Reason: ' . $this->reasonLabel($transition['reason'] ?? ''),
 			'Latency: ' . $latency,
 			'',
@@ -1840,8 +1853,7 @@ class Endpointmonitor implements \BMO {
 			'Device Port: ' . (($endpointDetails['device_port'] ?? '') !== '' ? $endpointDetails['device_port'] : 'Unknown'),
 			'Contact expires: ' . (($endpointDetails['contact_expires_at'] ?? '') !== '' ? $endpointDetails['contact_expires_at'] : 'Unknown'),
 			'Qualify frequency: ' . (($endpointDetails['qualify_frequency'] ?? '') !== '' ? $endpointDetails['qualify_frequency'] . ' seconds' : 'Unknown'),
-			'Last checked: ' . (($endpointDetails['last_checked_at'] ?? '') !== '' ? $endpointDetails['last_checked_at'] : 'Unknown'),
-			'Time: ' . $transition['created_at'],
+			'Transition time: ' . $transition['created_at'],
 			'Source: Asterisk',
 			'',
 			'Please note: email deliveries can be delayed.',
