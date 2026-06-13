@@ -132,8 +132,10 @@ $_emAssetVer = max(
 										</div>
 										<div class="em-map-description"><?php echo htmlspecialchars($endpoint['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-status"><?php echo htmlspecialchars($endpoint['last_known_status'] ?: 'Unknown', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Device IP'); ?>: <?php echo htmlspecialchars(($endpoint['device_ip'] ?? '') !== '' ? (string)$endpoint['device_ip'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Device Port'); ?>: <?php echo htmlspecialchars(($endpoint['device_port'] ?? '') !== '' ? (string)$endpoint['device_port'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="em-map-detail"><?php echo _('Device IP'); ?>: <?php echo htmlspecialchars(($endpoint['device_ip'] ?? '') !== '' ? (string)$endpoint['device_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="em-map-detail"><?php echo _('Device Port'); ?>: <?php echo htmlspecialchars(($endpoint['device_port'] ?? '') !== '' ? (string)$endpoint['device_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="em-map-detail"><?php echo _('Network IP'); ?>: <?php echo htmlspecialchars(($endpoint['network_ip'] ?? '') !== '' ? (string)$endpoint['network_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="em-map-detail"><?php echo _('Network Port'); ?>: <?php echo htmlspecialchars(($endpoint['network_port'] ?? '') !== '' ? (string)$endpoint['network_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Device'); ?>: <?php echo htmlspecialchars(($endpoint['device_name'] ?? '') !== '' ? (string)$endpoint['device_name'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Version'); ?>: <?php echo htmlspecialchars(($endpoint['firmware_version'] ?? '') !== '' ? (string)$endpoint['firmware_version'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 										<div class="em-map-detail"><?php echo _('Contact expires'); ?>: <?php echo htmlspecialchars(($endpoint['contact_expires_at'] ?? '') !== '' ? (string)$endpoint['contact_expires_at'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
@@ -429,8 +431,11 @@ $_emAssetVer = max(
 		const textNoEndpoints = <?php echo json_encode(_('No endpoints discovered yet. Use Manual Refresh to discover endpoints.')); ?>;
 		const textDeviceIp = <?php echo json_encode(_('Device IP')); ?>;
 		const textDevicePort = <?php echo json_encode(_('Device Port')); ?>;
+		const textNetworkIp = <?php echo json_encode(_('Network IP')); ?>;
+		const textNetworkPort = <?php echo json_encode(_('Network Port')); ?>;
 		const textLatency = <?php echo json_encode(_('Latency')); ?>;
 		const textNoQualify = <?php echo json_encode(_('Unavailable; qualify is not enabled.')); ?>;
+		const textUnknown = <?php echo json_encode(_('Unknown')); ?>;
 		let latestMapEndpoints = <?php echo json_encode($mapEndpoints); ?>;
 
 		function statusClass(status) {
@@ -513,8 +518,10 @@ $_emAssetVer = max(
 				html += '<div class="em-map-title"><span class="em-led ' + statusClass(status) + '"></span><code>' + escapeHtml(endpoint.extension) + '</code></div>';
 				html += '<div class="em-map-description">' + escapeHtml(endpoint.description || '-') + '</div>';
 				html += '<div class="em-map-status">' + escapeHtml(status) + '</div>';
-				html += '<div class="em-map-detail">' + escapeHtml(textDeviceIp) + ': ' + escapeHtml(endpoint.device_ip || '-') + '</div>';
-				html += '<div class="em-map-detail">' + escapeHtml(textDevicePort) + ': ' + escapeHtml(endpoint.device_port || '-') + '</div>';
+				html += '<div class="em-map-detail">' + escapeHtml(textDeviceIp) + ': ' + escapeHtml(endpoint.device_ip || textUnknown) + '</div>';
+				html += '<div class="em-map-detail">' + escapeHtml(textDevicePort) + ': ' + escapeHtml(endpoint.device_port || textUnknown) + '</div>';
+				html += '<div class="em-map-detail">' + escapeHtml(textNetworkIp) + ': ' + escapeHtml(endpoint.network_ip || textUnknown) + '</div>';
+				html += '<div class="em-map-detail">' + escapeHtml(textNetworkPort) + ': ' + escapeHtml(endpoint.network_port || textUnknown) + '</div>';
 				html += '<div class="em-map-detail">Device: ' + escapeHtml(endpoint.device_name || '-') + '</div>';
 				html += '<div class="em-map-detail">Version: ' + escapeHtml(endpoint.firmware_version || '-') + '</div>';
 				html += '<div class="em-map-detail">Contact expires: ' + escapeHtml(endpoint.contact_expires_at || '-') + '</div>';

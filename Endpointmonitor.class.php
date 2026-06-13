@@ -1627,6 +1627,8 @@ class Endpointmonitor implements \BMO {
 				'source_port' => $endpoint['source_port'] ?? null,
 				'device_ip' => $endpoint['device_ip'] ?? null,
 				'device_port' => $endpoint['device_port'] ?? null,
+				'network_ip' => $endpoint['network_ip'] ?? null,
+				'network_port' => $endpoint['network_port'] ?? null,
 				'seen_by_asterisk' => $endpoint['seen_by_asterisk'] ?? null,
 				'user_agent' => $endpoint['user_agent'] ?? null,
 				'device_name' => $endpoint['device_name'] ?? null,
@@ -1857,6 +1859,15 @@ class Endpointmonitor implements \BMO {
 		$contactAddress = $this->parseContactUriAddress($endpoint['contact_uri'] ?? null);
 		$endpoint['device_ip'] = $contactAddress['host'];
 		$endpoint['device_port'] = $contactAddress['port'];
+		$networkAddress = $this->parseContactUriNetworkAddress($endpoint['contact_uri'] ?? null);
+		$endpoint['network_ip'] = $networkAddress['host'] ?? null;
+		$endpoint['network_port'] = $networkAddress['port'] ?? null;
+		if ($endpoint['network_ip'] === null && ($endpoint['source_ip'] ?? '') !== '') {
+			$endpoint['network_ip'] = $endpoint['source_ip'];
+		}
+		if ($endpoint['network_port'] === null && ($endpoint['source_port'] ?? '') !== '') {
+			$endpoint['network_port'] = $endpoint['source_port'];
+		}
 		$endpoint['seen_by_asterisk'] = $this->formatSeenByAsterisk(
 			$endpoint['source_ip'] ?? null,
 			$endpoint['source_port'] ?? null
@@ -1922,7 +1933,7 @@ class Endpointmonitor implements \BMO {
 		$message = [
 			'EndPoint Monitor state change',
 			'',
-			'Endpoint: ' . $extension,
+			'Extension: ' . $extension,
 			'New state: ' . $toState,
 			'Reason: ' . $this->reasonLabel($transition['reason'] ?? ''),
 			'Latency: ' . $latency,
