@@ -1,9 +1,9 @@
 <?php
 /**
- * EndPoint Monitor main view.
+ * Registration Watch main view.
  *
  * @var string $moduleVersion
- * @var array $endpoints
+ * @var array $registrations
  * @var array $statusHistory
  * @var array $alertSettings
  * @var array $pruneSettings
@@ -18,13 +18,13 @@ if (!defined('FREEPBX_IS_AUTH')) {
 	die('No direct script access allowed');
 }
 
-$endpoints = isset($endpoints) && is_array($endpoints) ? $endpoints : [];
+$registrations = isset($registrations) && is_array($registrations) ? $registrations : [];
 $statusHistory = isset($statusHistory) && is_array($statusHistory) ? $statusHistory : [];
 $alertSettings = isset($alertSettings) && is_array($alertSettings) ? $alertSettings : [];
 $pruneSettings = isset($pruneSettings) && is_array($pruneSettings) ? $pruneSettings : [];
 $alertHistory = isset($alertHistory) && is_array($alertHistory) ? $alertHistory : [];
-$mapEndpoints = array_values(array_filter($endpoints, function ($endpoint) {
-	return isset($endpoint['discovered']) && (int)$endpoint['discovered'] === 1;
+$mapRegistrations = array_values(array_filter($registrations, function ($registration) {
+	return isset($registration['discovered']) && (int)$registration['discovered'] === 1;
 }));
 $uiShowLimit = isset($alertSettings['ui_show_limit']) ? strtolower((string)$alertSettings['ui_show_limit']) : '6';
 if (!in_array($uiShowLimit, ['6', '30', '60', '120', 'all'], true)) {
@@ -38,10 +38,10 @@ if (!in_array($statusPrunePolicy, ['hourly', 'daily', 'monthly', 'yearly', 'neve
 if (!in_array($alertPrunePolicy, ['hourly', 'daily', 'monthly', 'yearly', 'never'], true)) {
 	$alertPrunePolicy = 'never';
 }
-$mapDefaultLimit = $uiShowLimit === 'all' ? count($mapEndpoints) : (int)$uiShowLimit;
-$mapVisibleEndpoints = $uiShowLimit === 'all' ? $mapEndpoints : array_slice($mapEndpoints, 0, $mapDefaultLimit);
-$mapEndpointTotal = count($mapEndpoints);
-$mapVisibleCount = count($mapVisibleEndpoints);
+$mapDefaultLimit = $uiShowLimit === 'all' ? count($mapRegistrations) : (int)$uiShowLimit;
+$mapVisibleRegistrations = $uiShowLimit === 'all' ? $mapRegistrations : array_slice($mapRegistrations, 0, $mapDefaultLimit);
+$mapRegistrationTotal = count($mapRegistrations);
+$mapVisibleCount = count($mapVisibleRegistrations);
 $lastRefresh = isset($lastRefresh) ? (string)$lastRefresh : '';
 $refreshError = isset($refreshError) ? (string)$refreshError : '';
 $emailStatus = isset($emailStatus) && is_array($emailStatus) ? $emailStatus : [
@@ -53,29 +53,29 @@ $emailStatus = isset($emailStatus) && is_array($emailStatus) ? $emailStatus : [
 $pollIntervalSeconds = isset($pollIntervalSeconds) ? (int)$pollIntervalSeconds : 10;
 $csrfToken = isset($csrfToken) ? (string)$csrfToken : '';
 
-$_emStatusClass = function ($status) {
+$_rwStatusClass = function ($status) {
 	switch (strtolower(trim((string)$status))) {
 		case 'reachable':
-			return 'em-led-green';
+			return 'rw-led-green';
 		case 'registered (no qualify)':
 		case 'registered_no_qualify':
-			return 'em-led-amber';
+			return 'rw-led-amber';
 		case 'unreachable':
 		case 'not registered':
 		case 'not_registered':
-			return 'em-led-red';
+			return 'rw-led-red';
 		case 'unknown':
 		default:
-			return 'em-led-grey';
+			return 'rw-led-grey';
 	}
 };
 
-$_emIsRegisteredNoQualify = function ($status) {
+$_rwIsRegisteredNoQualify = function ($status) {
 	$status = strtolower(trim((string)$status));
 	return $status === 'registered (no qualify)' || $status === 'registered_no_qualify';
 };
 
-$_emDisplayLabel = function ($value) {
+$_rwDisplayLabel = function ($value) {
 	$value = trim((string)$value);
 	if ($value === '') {
 		return '-';
@@ -107,7 +107,7 @@ $_emDisplayLabel = function ($value) {
 	return ucwords(str_replace('_', ' ', $value));
 };
 
-$_emContactExpiryText = function ($expiresAt) {
+$_rwContactExpiryText = function ($expiresAt) {
 	$expiresAt = trim((string)$expiresAt);
 	if ($expiresAt === '') {
 		return _('Unknown');
@@ -126,33 +126,33 @@ $_emContactExpiryText = function ($expiresAt) {
 	return (string)$remainingSeconds . 's';
 };
 
-$_emAssetVer = max(
-	@filemtime(__DIR__ . '/../assets/js/endpointmonitor.js') ?: 0,
-	@filemtime(__DIR__ . '/../assets/css/endpointmonitor.css') ?: 0
+$_rwAssetVer = max(
+	@filemtime(__DIR__ . '/../assets/js/registrationwatch.js') ?: 0,
+	@filemtime(__DIR__ . '/../assets/css/registrationwatch.css') ?: 0
 ) ?: time();
 ?>
-<link rel="stylesheet" href="modules/endpointmonitor/assets/css/endpointmonitor.css?v=<?php echo $_emAssetVer; ?>">
+<link rel="stylesheet" href="modules/registrationwatch/assets/css/registrationwatch.css?v=<?php echo $_rwAssetVer; ?>">
 
-<div class="endpointmonitor" data-csrf-token="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>" data-poll-interval="<?php echo (int)$pollIntervalSeconds; ?>">
+<div class="registrationwatch" data-csrf-token="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>" data-poll-interval="<?php echo (int)$pollIntervalSeconds; ?>">
 	<input type="hidden" name="token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
 	<div class="row">
 		<div class="col-sm-12">
 			<h1>
-				<?php echo _('EndPoint Monitor'); ?>
+				<?php echo _('Registration Watch'); ?>
 				<small class="text-muted" style="font-size:0.5em;">v<?php echo htmlspecialchars($moduleVersion, ENT_QUOTES, 'UTF-8'); ?></small>
 			</h1>
 
-			<div id="em-message" class="alert em-message" style="<?php echo $refreshError === '' ? 'display:none;' : ''; ?>">
+			<div id="rw-message" class="alert rw-message" style="<?php echo $refreshError === '' ? 'display:none;' : ''; ?>">
 				<?php echo htmlspecialchars($refreshError, ENT_QUOTES, 'UTF-8'); ?>
 			</div>
 		</div>
 	</div>
 
-	<div class="row em-section">
+	<div class="row rw-section">
 		<div class="col-sm-12">
 			<div class="panel panel-default">
 				<div class="panel-heading">
-					<h3 class="panel-title"><?php echo _('EndPoint Status Map'); ?></h3>
+					<h3 class="panel-title"><?php echo _('Registration Status Map'); ?></h3>
 				</div>
 					<div class="panel-body">
 						<p style="margin-bottom: 15px;">
@@ -164,44 +164,44 @@ $_emAssetVer = max(
 							<?php endif; ?>
 						</p>
 						<div class="form-inline" style="margin-bottom: 15px;">
-							<label for="em-map-limit" style="margin-right: 6px;"><?php echo _('Show'); ?></label>
-							<select id="em-map-limit" class="form-control input-sm em-shared-show-limit" data-section="map" style="width:auto;">
+							<label for="rw-map-limit" style="margin-right: 6px;"><?php echo _('Show'); ?></label>
+							<select id="rw-map-limit" class="form-control input-sm rw-shared-show-limit" data-section="map" style="width:auto;">
 								<option value="6" <?php echo $uiShowLimit === '6' ? 'selected' : ''; ?>>6</option>
 								<option value="30" <?php echo $uiShowLimit === '30' ? 'selected' : ''; ?>>30</option>
 								<option value="60" <?php echo $uiShowLimit === '60' ? 'selected' : ''; ?>>60</option>
 								<option value="120" <?php echo $uiShowLimit === '120' ? 'selected' : ''; ?>>120</option>
 								<option value="all" <?php echo $uiShowLimit === 'all' ? 'selected' : ''; ?>><?php echo _('All'); ?></option>
 							</select>
-							<span id="em-map-count" class="text-muted" style="margin-left: 10px;">
-								<?php echo sprintf(_('Showing %d of %d EndPoints'), $mapVisibleCount, $mapEndpointTotal); ?>
+							<span id="rw-map-count" class="text-muted" style="margin-left: 10px;">
+								<?php echo sprintf(_('Showing %d of %d registered extensions'), $mapVisibleCount, $mapRegistrationTotal); ?>
 							</span>
 						</div>
-					<div id="em-topology-container" style="min-height: 200px;">
-						<?php if (empty($mapEndpoints)): ?>
-							<p class="text-muted"><?php echo _('No EndPoints discovered yet. Use Manual Refresh to discover EndPoints.'); ?></p>
+					<div id="rw-topology-container" style="min-height: 200px;">
+						<?php if (empty($mapRegistrations)): ?>
+							<p class="text-muted"><?php echo _('No registered extensions discovered yet. Use Manual Refresh to discover registrations.'); ?></p>
 						<?php else: ?>
-							<div class="em-endpoint-map">
-								<?php foreach ($mapVisibleEndpoints as $endpoint): ?>
-									<div class="em-map-tile">
-										<div class="em-map-title">
-											<span class="em-led <?php echo $_emStatusClass($endpoint['last_known_status']); ?>"></span>
-											<span><?php echo htmlspecialchars($endpoint['extension'], ENT_QUOTES, 'UTF-8'); ?></span>
+							<div class="rw-registration-map">
+								<?php foreach ($mapVisibleRegistrations as $registration): ?>
+									<div class="rw-map-tile">
+										<div class="rw-map-title">
+											<span class="rw-led <?php echo $_rwStatusClass($registration['last_known_status']); ?>"></span>
+											<span><?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?></span>
 										</div>
-										<div class="em-map-description"><?php echo htmlspecialchars($endpoint['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-status"><?php echo htmlspecialchars($_emDisplayLabel($endpoint['last_known_status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Device IP'); ?>: <?php echo htmlspecialchars(($endpoint['device_ip'] ?? '') !== '' ? (string)$endpoint['device_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Device Port'); ?>: <?php echo htmlspecialchars(($endpoint['device_port'] ?? '') !== '' ? (string)$endpoint['device_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Network IP'); ?>: <?php echo htmlspecialchars(($endpoint['network_ip'] ?? '') !== '' ? (string)$endpoint['network_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Network Port'); ?>: <?php echo htmlspecialchars(($endpoint['network_port'] ?? '') !== '' ? (string)$endpoint['network_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Device'); ?>: <?php echo htmlspecialchars(($endpoint['device_name'] ?? '') !== '' ? (string)$endpoint['device_name'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Version'); ?>: <?php echo htmlspecialchars(($endpoint['firmware_version'] ?? '') !== '' ? (string)$endpoint['firmware_version'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Contact expires'); ?>: <?php echo htmlspecialchars($_emContactExpiryText($endpoint['contact_expires_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail"><?php echo _('Qualify'); ?>: <?php echo htmlspecialchars(($endpoint['qualify_frequency'] ?? '') !== '' ? (string)$endpoint['qualify_frequency'] . ' seconds' : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-										<div class="em-map-detail">
+										<div class="rw-map-description"><?php echo htmlspecialchars($registration['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-status"><?php echo htmlspecialchars($_rwDisplayLabel($registration['last_known_status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail"><?php echo _('Device IP'); ?>: <?php echo htmlspecialchars(($registration['device_ip'] ?? '') !== '' ? (string)$registration['device_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail"><?php echo _('Device Port'); ?>: <?php echo htmlspecialchars(($registration['device_port'] ?? '') !== '' ? (string)$registration['device_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail"><?php echo _('Network IP'); ?>: <?php echo htmlspecialchars(($registration['network_ip'] ?? '') !== '' ? (string)$registration['network_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail"><?php echo _('Network Port'); ?>: <?php echo htmlspecialchars(($registration['network_port'] ?? '') !== '' ? (string)$registration['network_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail"><?php echo _('Device'); ?>: <?php echo htmlspecialchars(($registration['device_name'] ?? '') !== '' ? (string)$registration['device_name'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail"><?php echo _('Version'); ?>: <?php echo htmlspecialchars(($registration['firmware_version'] ?? '') !== '' ? (string)$registration['firmware_version'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail"><?php echo _('Contact expires'); ?>: <?php echo htmlspecialchars($_rwContactExpiryText($registration['contact_expires_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail"><?php echo _('Qualify'); ?>: <?php echo htmlspecialchars(($registration['qualify_frequency'] ?? '') !== '' ? (string)$registration['qualify_frequency'] . ' seconds' : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+										<div class="rw-map-detail">
 											<?php echo _('Latency'); ?>:
-											<?php if ($endpoint['latency_ms'] !== null && $endpoint['latency_ms'] !== ''): ?>
-												<?php echo htmlspecialchars((string)$endpoint['latency_ms'], ENT_QUOTES, 'UTF-8'); ?> ms
-											<?php elseif ($_emIsRegisteredNoQualify($endpoint['last_known_status'] ?? '')): ?>
+											<?php if ($registration['latency_ms'] !== null && $registration['latency_ms'] !== ''): ?>
+												<?php echo htmlspecialchars((string)$registration['latency_ms'], ENT_QUOTES, 'UTF-8'); ?> ms
+											<?php elseif ($_rwIsRegisteredNoQualify($registration['last_known_status'] ?? '')): ?>
 												<?php echo _('Unavailable; qualify is not enabled.'); ?>
 											<?php else: ?>
 												-
@@ -217,49 +217,49 @@ $_emAssetVer = max(
 		</div>
 	</div>
 
-	<div class="row em-section">
+	<div class="row rw-section">
 		<div class="col-sm-12">
 			<div class="panel panel-default">
 				<div class="panel-heading">
-					<h3 class="panel-title"><?php echo _('Monitored EndPoints'); ?></h3>
+					<h3 class="panel-title"><?php echo _('Watched extensions'); ?></h3>
 				</div>
 				<div class="panel-body">
-					<?php if (empty($endpoints)): ?>
-						<p class="em-placeholder"><?php echo _('No PJSIP EndPoints are stored yet. Use Manual Refresh to discover EndPoints.'); ?></p>
+					<?php if (empty($registrations)): ?>
+						<p class="rw-placeholder"><?php echo _('No PJSIP extensions are stored yet. Use Manual Refresh to discover registrations.'); ?></p>
 					<?php else: ?>
-						<div class="table-responsive em-endpoints-wrap">
-							<table class="table table-striped table-condensed em-endpoints">
+						<div class="table-responsive rw-registrations-wrap">
+							<table class="table table-striped table-condensed rw-registrations">
 								<thead>
 									<tr>
 										<th><?php echo _('Selection'); ?></th>
-										<th><?php echo _('EndPoint'); ?></th>
+										<th><?php echo _('Extension'); ?></th>
 										<th><?php echo _('Description'); ?></th>
 										<th><?php echo _('Notes'); ?></th>
 									</tr>
 								</thead>
 								<tbody>
-									<?php foreach ($endpoints as $endpoint): ?>
-										<tr data-extension="<?php echo htmlspecialchars($endpoint['extension'], ENT_QUOTES, 'UTF-8'); ?>">
+									<?php foreach ($registrations as $registration): ?>
+										<tr data-extension="<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?>">
 											<td data-label="<?php echo _('Selection'); ?>">
-													<label class="em-toggle">
-														<input type="checkbox" class="em-enabled" <?php echo !empty($endpoint['enabled']) ? 'checked' : ''; ?>>
-														<span><?php echo !empty($endpoint['enabled']) ? _('Selected') : _('Not selected'); ?></span>
+													<label class="rw-toggle">
+														<input type="checkbox" class="rw-enabled" <?php echo !empty($registration['enabled']) ? 'checked' : ''; ?>>
+														<span><?php echo !empty($registration['enabled']) ? _('Selected') : _('Not selected'); ?></span>
 													</label>
 											</td>
-											<td data-label="<?php echo _('EndPoint'); ?>"><?php echo htmlspecialchars($endpoint['extension'], ENT_QUOTES, 'UTF-8'); ?></td>
-											<td data-label="<?php echo _('Description'); ?>"><?php echo htmlspecialchars($endpoint['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
+											<td data-label="<?php echo _('Extension'); ?>"><?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?></td>
+											<td data-label="<?php echo _('Description'); ?>"><?php echo htmlspecialchars($registration['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
 											<td data-label="<?php echo _('Notes'); ?>">
 											<input
 												type="text"
-												class="form-control input-sm em-endpoint-notes"
-												data-extension="<?php echo htmlspecialchars((string)$endpoint['extension'], ENT_QUOTES, 'UTF-8'); ?>"
+												class="form-control input-sm rw-registration-notes"
+												data-extension="<?php echo htmlspecialchars((string)$registration['extension'], ENT_QUOTES, 'UTF-8'); ?>"
 												maxlength="48"
-												value="<?php echo htmlspecialchars((string)($endpoint['notes'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
+												value="<?php echo htmlspecialchars((string)($registration['notes'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
 												placeholder="<?php echo _('Add note...'); ?>"
 											>
-											<small class="text-muted em-notes-status">
-												<?php if (!empty($endpoint['notes_updated_at'])): ?>
-													<?php echo _('Saved'); ?> <?php echo htmlspecialchars((string)$endpoint['notes_updated_at'], ENT_QUOTES, 'UTF-8'); ?>
+											<small class="text-muted rw-notes-status">
+												<?php if (!empty($registration['notes_updated_at'])): ?>
+													<?php echo _('Saved'); ?> <?php echo htmlspecialchars((string)$registration['notes_updated_at'], ENT_QUOTES, 'UTF-8'); ?>
 												<?php endif; ?>
 											</small>
 										</td>
@@ -274,7 +274,7 @@ $_emAssetVer = max(
 		</div>
 	</div>
 
-	<div class="row em-section">
+	<div class="row rw-section">
 		<div class="col-sm-12">
 			<div class="panel panel-default">
 				<div class="panel-heading">
@@ -285,49 +285,49 @@ $_emAssetVer = max(
 						<div class="col-sm-6">
 							<div class="checkbox">
 								<label>
-									<input type="checkbox" id="em-alert-enabled" <?php echo ($alertSettings['alert_enabled'] ?? '0') === '1' ? 'checked' : ''; ?>>
+									<input type="checkbox" id="rw-alert-enabled" <?php echo ($alertSettings['alert_enabled'] ?? '0') === '1' ? 'checked' : ''; ?>>
 									<?php echo _('Enable email alerts'); ?>
 								</label>
 							</div>
 							<div class="form-group">
-								<label for="em-alert-recipients"><?php echo _('Recipients'); ?></label>
-								<input type="text" id="em-alert-recipients" class="form-control" value="<?php echo htmlspecialchars($alertSettings['alert_recipients'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="<?php echo _('admin@example.com, support@example.com'); ?>">
+								<label for="rw-alert-recipients"><?php echo _('Recipients'); ?></label>
+								<input type="text" id="rw-alert-recipients" class="form-control" value="<?php echo htmlspecialchars($alertSettings['alert_recipients'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="<?php echo _('admin@example.com, support@example.com'); ?>">
 							</div>
 							<div class="form-group">
-								<label for="em-debounce-seconds"><?php echo _('Debounce delay (seconds)'); ?></label>
-								<input type="number" id="em-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
+								<label for="rw-debounce-seconds"><?php echo _('Debounce delay (seconds)'); ?></label>
+								<input type="number" id="rw-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
 								<p class="help-block"><?php echo _('How long a problem must remain active before an alert is sent. Use 0 to alert immediately. Maximum 86400 seconds, 24 hours.'); ?></p>
 							</div>
 							<div class="form-group">
-								<label for="em-repeat-suppression-seconds"><?php echo _('Repeat suppression (seconds)'); ?></label>
-								<input type="number" id="em-repeat-suppression-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['repeat_suppression_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('How long to wait before sending another alert for the same EndPoint and alert type. Use 0 to send every eligible alert. Maximum 86400 seconds, 24 hours.'); ?></p>
+								<label for="rw-repeat-suppression-seconds"><?php echo _('Repeat suppression (seconds)'); ?></label>
+								<input type="number" id="rw-repeat-suppression-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['repeat_suppression_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
+								<p class="help-block"><?php echo _('How long to wait before sending another alert for the same extension and alert type. Use 0 to send every eligible alert. Maximum 86400 seconds, 24 hours.'); ?></p>
 							</div>
 						</div>
 						<div class="col-sm-6">
 							<div class="checkbox">
 								<label>
-									<input type="checkbox" id="em-alert-on-unreachable" <?php echo ($alertSettings['alert_on_unreachable'] ?? '1') === '1' ? 'checked' : ''; ?>>
-									<?php echo _('Alert when an EndPoint becomes unreachable'); ?>
+									<input type="checkbox" id="rw-alert-on-unreachable" <?php echo ($alertSettings['alert_on_unreachable'] ?? '1') === '1' ? 'checked' : ''; ?>>
+									<?php echo _('Alert when an extension becomes unreachable'); ?>
 								</label>
 							</div>
 							<div class="checkbox">
 								<label>
-									<input type="checkbox" id="em-alert-on-not-registered" <?php echo ($alertSettings['alert_on_not_registered'] ?? '1') === '1' ? 'checked' : ''; ?>>
-									<?php echo _('Alert when an EndPoint becomes not registered'); ?>
+									<input type="checkbox" id="rw-alert-on-not-registered" <?php echo ($alertSettings['alert_on_not_registered'] ?? '1') === '1' ? 'checked' : ''; ?>>
+									<?php echo _('Alert when an extension becomes not registered'); ?>
 								</label>
 							</div>
 							<div class="checkbox">
 								<label>
-									<input type="checkbox" id="em-alert-on-recovery" <?php echo ($alertSettings['alert_on_recovery'] ?? '1') === '1' ? 'checked' : ''; ?>>
-									<?php echo _('Alert when an EndPoint recovers'); ?>
+									<input type="checkbox" id="rw-alert-on-recovery" <?php echo ($alertSettings['alert_on_recovery'] ?? '1') === '1' ? 'checked' : ''; ?>>
+									<?php echo _('Alert when an extension recovers'); ?>
 								</label>
 							</div>
-							<div class="em-actions">
-								<button type="button" id="em-save-alerts" class="btn btn-primary">
+							<div class="rw-actions">
+								<button type="button" id="rw-save-alerts" class="btn btn-primary">
 									<i class="fa fa-save"></i> <?php echo _('Save'); ?>
 								</button>
-								<button type="button" id="em-test-email" class="btn btn-default">
+								<button type="button" id="rw-test-email" class="btn btn-default">
 									<i class="fa fa-envelope"></i> <?php echo _('Test Email'); ?>
 								</button>
 							</div>
@@ -338,44 +338,44 @@ $_emAssetVer = max(
 		</div>
 	</div>
 
-	<div class="row em-section">
+	<div class="row rw-section">
 		<div class="col-sm-12">
 				<div class="panel panel-default">
 					<div class="panel-heading">
 						<h3 class="panel-title"><?php echo _('Status History'); ?></h3>
 					</div>
 					<div class="panel-body">
-						<div class="em-history-control-row">
-							<div class="em-prune-control" data-history-type="status" data-active-policy="<?php echo htmlspecialchars($statusPrunePolicy, ENT_QUOTES, 'UTF-8'); ?>">
-								<div class="form-inline em-prune-inline">
-									<label for="em-status-prune-policy"><?php echo _('Prune'); ?></label>
-									<select id="em-status-prune-policy" class="form-control input-sm em-prune-policy">
+						<div class="rw-history-control-row">
+							<div class="rw-prune-control" data-history-type="status" data-active-policy="<?php echo htmlspecialchars($statusPrunePolicy, ENT_QUOTES, 'UTF-8'); ?>">
+								<div class="form-inline rw-prune-inline">
+									<label for="rw-status-prune-policy"><?php echo _('Prune'); ?></label>
+									<select id="rw-status-prune-policy" class="form-control input-sm rw-prune-policy">
 										<option value="never" <?php echo $statusPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
 										<option value="hourly" <?php echo $statusPrunePolicy === 'hourly' ? 'selected' : ''; ?>><?php echo _('Hourly'); ?></option>
 										<option value="daily" <?php echo $statusPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
 										<option value="monthly" <?php echo $statusPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
 										<option value="yearly" <?php echo $statusPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
 									</select>
-									<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
+									<button type="button" class="btn btn-default btn-sm rw-apply-prune"><?php echo _('Apply'); ?></button>
 								</div>
-								<label class="checkbox-inline em-prune-confirm-wrap" style="display:none;">
-									<input type="checkbox" class="em-prune-confirm">
+								<label class="checkbox-inline rw-prune-confirm-wrap" style="display:none;">
+									<input type="checkbox" class="rw-prune-confirm">
 									<?php echo _('I understand this will permanently delete older Status History rows.'); ?>
 								</label>
 							</div>
-							<div class="em-history-show-slot" data-show-section="status-history"></div>
+							<div class="rw-history-show-slot" data-show-section="status-history"></div>
 						</div>
 						<?php if (empty($statusHistory)): ?>
-							<p class="em-placeholder em-history-empty"><?php echo _('No status transitions have been recorded yet.'); ?></p>
+							<p class="rw-placeholder rw-history-empty"><?php echo _('No status transitions have been recorded yet.'); ?></p>
 						<?php else: ?>
-							<p class="em-placeholder em-history-empty" style="display:none;"><?php echo _('No status transitions have been recorded yet.'); ?></p>
+							<p class="rw-placeholder rw-history-empty" style="display:none;"><?php echo _('No status transitions have been recorded yet.'); ?></p>
 						<?php endif; ?>
-					<div class="table-responsive em-history-wrap" style="<?php echo empty($statusHistory) ? 'display:none;' : ''; ?>">
-						<table class="table table-striped table-condensed em-history">
+					<div class="table-responsive rw-history-wrap" style="<?php echo empty($statusHistory) ? 'display:none;' : ''; ?>">
+						<table class="table table-striped table-condensed rw-history">
 							<thead>
 								<tr>
 									<th><?php echo _('Time'); ?></th>
-									<th><?php echo _('EndPoint'); ?></th>
+									<th><?php echo _('Extension'); ?></th>
 									<th><?php echo _('From'); ?></th>
 									<th><?php echo _('To'); ?></th>
 									<th><?php echo _('Source'); ?></th>
@@ -388,14 +388,14 @@ $_emAssetVer = max(
 								<?php foreach ($statusHistory as $entry): ?>
 									<tr data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>">
 										<td data-label="<?php echo _('Time'); ?>"><?php echo htmlspecialchars($entry['created_at'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('EndPoint'); ?>"><?php echo htmlspecialchars($entry['extension'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('From'); ?>"><?php echo htmlspecialchars($_emDisplayLabel($entry['from_state'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('To'); ?>"><?php echo htmlspecialchars($_emDisplayLabel($entry['to_state'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('Source'); ?>"><?php echo htmlspecialchars($_emDisplayLabel($entry['source'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('Reason'); ?>"><?php echo htmlspecialchars($_emDisplayLabel($entry['reason'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('Extension'); ?>"><?php echo htmlspecialchars($entry['extension'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('From'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['from_state'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('To'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['to_state'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('Source'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['source'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('Reason'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['reason'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
 										<td data-label="<?php echo _('Latency'); ?>"><?php echo $entry['latency_ms'] !== null && $entry['latency_ms'] !== '' ? htmlspecialchars((string)$entry['latency_ms'], ENT_QUOTES, 'UTF-8') . ' ms' : '-'; ?></td>
 										<td data-label="<?php echo _('Actions'); ?>">
-											<button type="button" class="btn btn-xs btn-danger em-delete-status-history" data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>" title="<?php echo _('Delete Status History row'); ?>">
+											<button type="button" class="btn btn-xs btn-danger rw-delete-status-history" data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>" title="<?php echo _('Delete Status History row'); ?>">
 												<i class="fa fa-trash"></i>
 											</button>
 										</td>
@@ -409,44 +409,44 @@ $_emAssetVer = max(
 		</div>
 	</div>
 
-	<div class="row em-section">
+	<div class="row rw-section">
 		<div class="col-sm-12">
 				<div class="panel panel-default">
 					<div class="panel-heading">
 						<h3 class="panel-title"><?php echo _('Alert History'); ?></h3>
 					</div>
 					<div class="panel-body">
-						<div class="em-history-control-row">
-							<div class="em-prune-control" data-history-type="alert" data-active-policy="<?php echo htmlspecialchars($alertPrunePolicy, ENT_QUOTES, 'UTF-8'); ?>">
-								<div class="form-inline em-prune-inline">
-									<label for="em-alert-prune-policy"><?php echo _('Prune'); ?></label>
-									<select id="em-alert-prune-policy" class="form-control input-sm em-prune-policy">
+						<div class="rw-history-control-row">
+							<div class="rw-prune-control" data-history-type="alert" data-active-policy="<?php echo htmlspecialchars($alertPrunePolicy, ENT_QUOTES, 'UTF-8'); ?>">
+								<div class="form-inline rw-prune-inline">
+									<label for="rw-alert-prune-policy"><?php echo _('Prune'); ?></label>
+									<select id="rw-alert-prune-policy" class="form-control input-sm rw-prune-policy">
 										<option value="never" <?php echo $alertPrunePolicy === 'never' ? 'selected' : ''; ?>><?php echo _('Never'); ?></option>
 										<option value="hourly" <?php echo $alertPrunePolicy === 'hourly' ? 'selected' : ''; ?>><?php echo _('Hourly'); ?></option>
 										<option value="daily" <?php echo $alertPrunePolicy === 'daily' ? 'selected' : ''; ?>><?php echo _('Daily'); ?></option>
 										<option value="monthly" <?php echo $alertPrunePolicy === 'monthly' ? 'selected' : ''; ?>><?php echo _('Monthly'); ?></option>
 										<option value="yearly" <?php echo $alertPrunePolicy === 'yearly' ? 'selected' : ''; ?>><?php echo _('Yearly'); ?></option>
 									</select>
-									<button type="button" class="btn btn-default btn-sm em-apply-prune"><?php echo _('Apply'); ?></button>
+									<button type="button" class="btn btn-default btn-sm rw-apply-prune"><?php echo _('Apply'); ?></button>
 								</div>
-								<label class="checkbox-inline em-prune-confirm-wrap" style="display:none;">
-									<input type="checkbox" class="em-prune-confirm">
+								<label class="checkbox-inline rw-prune-confirm-wrap" style="display:none;">
+									<input type="checkbox" class="rw-prune-confirm">
 									<?php echo _('I understand this will permanently delete older Alert History rows.'); ?>
 								</label>
 							</div>
-							<div class="em-history-show-slot" data-show-section="alert-history"></div>
+							<div class="rw-history-show-slot" data-show-section="alert-history"></div>
 						</div>
 						<?php if (empty($alertHistory)): ?>
-							<p class="em-placeholder em-alert-history-empty"><?php echo _('No alert attempts have been recorded yet.'); ?></p>
+							<p class="rw-placeholder rw-alert-history-empty"><?php echo _('No alert attempts have been recorded yet.'); ?></p>
 						<?php else: ?>
-							<p class="em-placeholder em-alert-history-empty" style="display:none;"><?php echo _('No alert attempts have been recorded yet.'); ?></p>
+							<p class="rw-placeholder rw-alert-history-empty" style="display:none;"><?php echo _('No alert attempts have been recorded yet.'); ?></p>
 						<?php endif; ?>
-					<div class="table-responsive em-alert-history-wrap" style="<?php echo empty($alertHistory) ? 'display:none;' : ''; ?>">
-						<table class="table table-striped table-condensed em-alert-history">
+					<div class="table-responsive rw-alert-history-wrap" style="<?php echo empty($alertHistory) ? 'display:none;' : ''; ?>">
+						<table class="table table-striped table-condensed rw-alert-history">
 							<thead>
 								<tr>
 									<th><?php echo _('Time'); ?></th>
-									<th><?php echo _('EndPoint'); ?></th>
+									<th><?php echo _('Extension'); ?></th>
 									<th><?php echo _('Type'); ?></th>
 									<th><?php echo _('Status'); ?></th>
 									<th><?php echo _('Recipient'); ?></th>
@@ -459,14 +459,14 @@ $_emAssetVer = max(
 								<?php foreach ($alertHistory as $entry): ?>
 									<tr data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>">
 										<td data-label="<?php echo _('Time'); ?>"><?php echo htmlspecialchars($entry['sent_at'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('EndPoint'); ?>"><?php echo htmlspecialchars($entry['extension'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('Type'); ?>"><?php echo htmlspecialchars($_emDisplayLabel($entry['alert_type'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('Status'); ?>"><?php echo htmlspecialchars($_emDisplayLabel($entry['status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('Extension'); ?>"><?php echo htmlspecialchars($entry['extension'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('Type'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['alert_type'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('Status'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
 										<td data-label="<?php echo _('Recipient'); ?>"><?php echo htmlspecialchars($entry['recipient'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
-										<td data-label="<?php echo _('Result'); ?>"><?php echo htmlspecialchars($_emDisplayLabel($entry['result'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+										<td data-label="<?php echo _('Result'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['result'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
 										<td data-label="<?php echo _('Error'); ?>"><?php echo htmlspecialchars($entry['error'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
 										<td data-label="<?php echo _('Actions'); ?>">
-											<button type="button" class="btn btn-xs btn-danger em-delete-alert-history" data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>" title="<?php echo _('Delete Alert History row'); ?>">
+											<button type="button" class="btn btn-xs btn-danger rw-delete-alert-history" data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>" title="<?php echo _('Delete Alert History row'); ?>">
 												<i class="fa fa-trash"></i>
 											</button>
 										</td>
@@ -481,11 +481,11 @@ $_emAssetVer = max(
 	</div>
 </div>
 
-<script src="modules/endpointmonitor/assets/js/endpointmonitor.js?v=<?php echo $_emAssetVer; ?>"></script>
+<script src="modules/registrationwatch/assets/js/registrationwatch.js?v=<?php echo $_rwAssetVer; ?>"></script>
 <script>
-	// Endpoint map renderer. Auto-refresh uses the read-only topology AJAX path in endpointmonitor.js.
+	// Registration map renderer. Auto-refresh uses the read-only topology AJAX path in registrationwatch.js.
 	(function() {
-		const textNoEndpoints = <?php echo json_encode(_('No EndPoints discovered yet. Use Manual Refresh to discover EndPoints.')); ?>;
+		const textNoRegistrations = <?php echo json_encode(_('No registered extensions discovered yet. Use Manual Refresh to discover registrations.')); ?>;
 		const textDeviceIp = <?php echo json_encode(_('Device IP')); ?>;
 		const textDevicePort = <?php echo json_encode(_('Device Port')); ?>;
 		const textNetworkIp = <?php echo json_encode(_('Network IP')); ?>;
@@ -494,22 +494,22 @@ $_emAssetVer = max(
 		const textNoQualify = <?php echo json_encode(_('Unavailable; qualify is not enabled.')); ?>;
 		const textUnknown = <?php echo json_encode(_('Unknown')); ?>;
 		const textExpired = <?php echo json_encode(_('Expired')); ?>;
-		let latestMapEndpoints = <?php echo json_encode($mapEndpoints); ?>;
+		let latestMapRegistrations = <?php echo json_encode($mapRegistrations); ?>;
 
 		function statusClass(status) {
 			switch (String(status || 'Unknown').trim().toLowerCase()) {
 				case 'reachable':
-					return 'em-led-green';
+					return 'rw-led-green';
 				case 'registered (no qualify)':
 				case 'registered_no_qualify':
-					return 'em-led-amber';
+					return 'rw-led-amber';
 				case 'unreachable':
 				case 'not registered':
 				case 'not_registered':
-					return 'em-led-red';
+					return 'rw-led-red';
 				case 'unknown':
 				default:
-					return 'em-led-grey';
+					return 'rw-led-grey';
 			}
 		}
 
@@ -518,9 +518,9 @@ $_emAssetVer = max(
 			return status === 'registered (no qualify)' || status === 'registered_no_qualify';
 		}
 
-		function latencyText(endpoint, status) {
-			if (endpoint.latency_ms !== null && endpoint.latency_ms !== undefined && endpoint.latency_ms !== '') {
-				return escapeHtml(endpoint.latency_ms) + ' ms';
+		function latencyText(registration, status) {
+			if (registration.latency_ms !== null && registration.latency_ms !== undefined && registration.latency_ms !== '') {
+				return escapeHtml(registration.latency_ms) + ' ms';
 			}
 			if (isRegisteredNoQualify(status)) {
 				return textNoQualify;
@@ -573,18 +573,18 @@ $_emAssetVer = max(
 			return remainingSeconds + 's';
 		}
 
-		function discoveredEndpoints(endpoints) {
-			if (!Array.isArray(endpoints)) {
+		function discoveredRegistrations(registrations) {
+			if (!Array.isArray(registrations)) {
 				return [];
 			}
 
-			return endpoints.filter(function(endpoint) {
-				return endpoint.discovered === undefined || parseInt(endpoint.discovered, 10) !== 0;
+			return registrations.filter(function(registration) {
+				return registration.discovered === undefined || parseInt(registration.discovered, 10) !== 0;
 			});
 		}
 
 		function selectedMapLimit() {
-			const select = document.getElementById('em-map-limit');
+			const select = document.getElementById('rw-map-limit');
 			if (!select || select.value === 'all') {
 				return 'all';
 			}
@@ -594,21 +594,21 @@ $_emAssetVer = max(
 		}
 
 		function updateMapCount(shown, total) {
-			const count = document.getElementById('em-map-count');
+			const count = document.getElementById('rw-map-count');
 			if (!count) {
 				return;
 			}
 
-			count.textContent = 'Showing ' + shown + ' of ' + total + ' EndPoints';
+			count.textContent = 'Showing ' + shown + ' of ' + total + ' registered extensions';
 		}
 
-		function renderEndpointMap(endpoints) {
-			const container = document.getElementById('em-topology-container');
+		function renderRegistrationMap(registrations) {
+			const container = document.getElementById('rw-topology-container');
 			if (!container) return;
 
-			latestMapEndpoints = Array.isArray(endpoints) ? endpoints : [];
+			latestMapRegistrations = Array.isArray(registrations) ? registrations : [];
 
-			const discovered = discoveredEndpoints(latestMapEndpoints);
+			const discovered = discoveredRegistrations(latestMapRegistrations);
 			const total = discovered.length;
 			const limit = selectedMapLimit();
 			const visible = limit === 'all' ? discovered : discovered.slice(0, limit);
@@ -616,38 +616,38 @@ $_emAssetVer = max(
 			updateMapCount(visible.length, total);
 
 			if (total === 0) {
-				container.innerHTML = '<p class="text-muted">' + escapeHtml(textNoEndpoints) + '</p>';
+				container.innerHTML = '<p class="text-muted">' + escapeHtml(textNoRegistrations) + '</p>';
 				return;
 			}
 
-			let html = '<div class="em-endpoint-map">';
-			for (const endpoint of visible) {
-				const status = endpoint.status || endpoint.last_known_status || 'Unknown';
-				html += '<div class="em-map-tile">';
-				html += '<div class="em-map-title"><span class="em-led ' + statusClass(status) + '"></span><span>' + escapeHtml(endpoint.extension) + '</span></div>';
-				html += '<div class="em-map-description">' + escapeHtml(endpoint.description || '-') + '</div>';
-				html += '<div class="em-map-status">' + escapeHtml(displayLabel(status)) + '</div>';
-				html += '<div class="em-map-detail">' + escapeHtml(textDeviceIp) + ': ' + escapeHtml(endpoint.device_ip || textUnknown) + '</div>';
-				html += '<div class="em-map-detail">' + escapeHtml(textDevicePort) + ': ' + escapeHtml(endpoint.device_port || textUnknown) + '</div>';
-				html += '<div class="em-map-detail">' + escapeHtml(textNetworkIp) + ': ' + escapeHtml(endpoint.network_ip || textUnknown) + '</div>';
-				html += '<div class="em-map-detail">' + escapeHtml(textNetworkPort) + ': ' + escapeHtml(endpoint.network_port || textUnknown) + '</div>';
-				html += '<div class="em-map-detail">Device: ' + escapeHtml(endpoint.device_name || '-') + '</div>';
-				html += '<div class="em-map-detail">Version: ' + escapeHtml(endpoint.firmware_version || '-') + '</div>';
-				html += '<div class="em-map-detail">Contact expires: ' + escapeHtml(contactExpiryText(endpoint.contact_expires_at)) + '</div>';
-				html += '<div class="em-map-detail">Qualify: ' + escapeHtml(endpoint.qualify_frequency ? endpoint.qualify_frequency + ' seconds' : '-') + '</div>';
-				html += '<div class="em-map-detail">' + escapeHtml(textLatency) + ': ' + latencyText(endpoint, status) + '</div>';
+			let html = '<div class="rw-registration-map">';
+			for (const registration of visible) {
+				const status = registration.status || registration.last_known_status || 'Unknown';
+				html += '<div class="rw-map-tile">';
+				html += '<div class="rw-map-title"><span class="rw-led ' + statusClass(status) + '"></span><span>' + escapeHtml(registration.extension) + '</span></div>';
+				html += '<div class="rw-map-description">' + escapeHtml(registration.description || '-') + '</div>';
+				html += '<div class="rw-map-status">' + escapeHtml(displayLabel(status)) + '</div>';
+				html += '<div class="rw-map-detail">' + escapeHtml(textDeviceIp) + ': ' + escapeHtml(registration.device_ip || textUnknown) + '</div>';
+				html += '<div class="rw-map-detail">' + escapeHtml(textDevicePort) + ': ' + escapeHtml(registration.device_port || textUnknown) + '</div>';
+				html += '<div class="rw-map-detail">' + escapeHtml(textNetworkIp) + ': ' + escapeHtml(registration.network_ip || textUnknown) + '</div>';
+				html += '<div class="rw-map-detail">' + escapeHtml(textNetworkPort) + ': ' + escapeHtml(registration.network_port || textUnknown) + '</div>';
+				html += '<div class="rw-map-detail">Device: ' + escapeHtml(registration.device_name || '-') + '</div>';
+				html += '<div class="rw-map-detail">Version: ' + escapeHtml(registration.firmware_version || '-') + '</div>';
+				html += '<div class="rw-map-detail">Contact expires: ' + escapeHtml(contactExpiryText(registration.contact_expires_at)) + '</div>';
+				html += '<div class="rw-map-detail">Qualify: ' + escapeHtml(registration.qualify_frequency ? registration.qualify_frequency + ' seconds' : '-') + '</div>';
+				html += '<div class="rw-map-detail">' + escapeHtml(textLatency) + ': ' + latencyText(registration, status) + '</div>';
 				html += '</div>';
 			}
 			html += '</div>';
 
 			container.innerHTML = html;
 		}
-		window.EndpointMonitorRenderEndpointMap = renderEndpointMap;
+		window.RegistrationWatchRenderRegistrationMap = renderRegistrationMap;
 
-		const mapLimitSelect = document.getElementById('em-map-limit');
+		const mapLimitSelect = document.getElementById('rw-map-limit');
 		if (mapLimitSelect) {
 			mapLimitSelect.addEventListener('change', function() {
-				renderEndpointMap(latestMapEndpoints);
+				renderRegistrationMap(latestMapRegistrations);
 			});
 		}
 

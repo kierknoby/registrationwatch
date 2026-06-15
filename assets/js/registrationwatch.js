@@ -1,5 +1,5 @@
 /**
- * EndPoint Monitor admin interactions.
+ * Registration Watch admin interactions.
  */
 (function ($) {
 	'use strict';
@@ -48,7 +48,7 @@
 	}
 
 	function showMessage(message, level) {
-		var el = $('#em-message');
+		var el = $('#rw-message');
 		el.removeClass('alert-success alert-danger alert-info');
 		if (!message) {
 			el.hide();
@@ -68,8 +68,8 @@
 		return input.length ? $.trim(String(input.val() || '')) : value;
 	}
 
-	function endpointMonitorToken(root) {
-		var scope = root && root.length ? root : $('.endpointmonitor');
+	function registrationWatchToken(root) {
+		var scope = root && root.length ? root : $('.registrationwatch');
 		return normaliseToken(
 			scope.attr('data-csrf-token')
 				|| scope.data('csrf-token')
@@ -80,37 +80,37 @@
 		);
 	}
 
-	window.EndpointMonitorToken = endpointMonitorToken;
+	window.RegistrationWatchToken = registrationWatchToken;
 
-	function endpointRows(extension) {
-		return $('.endpointmonitor tr[data-extension]').filter(function () {
+	function registrationRows(extension) {
+		return $('.registrationwatch tr[data-extension]').filter(function () {
 			return String($(this).data('extension')) === String(extension);
 		});
 	}
 
 	function setToggleText(input) {
-		var label = input.closest('.em-toggle').find('span');
+		var label = input.closest('.rw-toggle').find('span');
 		label.text(input.is(':checked') ? 'Selected' : 'Not selected');
 	}
 
-	function renderStatusRows(endpoints) {
-		$.each(endpoints || [], function (_, endpoint) {
-			var rows = endpointRows(endpoint.extension);
-			var status = endpoint.last_known_status || endpoint.status || '-';
-			rows.find('.em-status-value').text(displayLabel(status));
-			rows.find('.em-device-name').text(endpoint.device_name || '-');
-			rows.find('.em-firmware-version').text(endpoint.firmware_version || '-');
-			rows.find('.em-source-ip').text(endpoint.source_ip || '-');
-			rows.find('.em-source-port').text(endpoint.source_port || '-');
-			rows.find('.em-contact-uri').html(escapeHtml(endpoint.contact_uri));
-			rows.find('.em-last-seen').text(endpoint.last_seen_at || '-');
-			rows.find('.em-last-checked').text(endpoint.last_checked_at || '-');
-			if (endpoint.latency_ms) {
-				rows.find('.em-latency').text(endpoint.latency_ms + ' ms');
+	function renderStatusRows(registrations) {
+		$.each(registrations || [], function (_, registration) {
+			var rows = registrationRows(registration.extension);
+			var status = registration.last_known_status || registration.status || '-';
+			rows.find('.rw-status-value').text(displayLabel(status));
+			rows.find('.rw-device-name').text(registration.device_name || '-');
+			rows.find('.rw-firmware-version').text(registration.firmware_version || '-');
+			rows.find('.rw-source-ip').text(registration.source_ip || '-');
+			rows.find('.rw-source-port').text(registration.source_port || '-');
+			rows.find('.rw-contact-uri').html(escapeHtml(registration.contact_uri));
+			rows.find('.rw-last-seen').text(registration.last_seen_at || '-');
+			rows.find('.rw-last-checked').text(registration.last_checked_at || '-');
+			if (registration.latency_ms) {
+				rows.find('.rw-latency').text(registration.latency_ms + ' ms');
 			} else if (isRegisteredNoQualify(status)) {
-				rows.find('.em-latency').text('Unavailable; qualify is not enabled.');
+				rows.find('.rw-latency').text('Unavailable; qualify is not enabled.');
 			} else {
-				rows.find('.em-latency').text('-');
+				rows.find('.rw-latency').text('-');
 			}
 		});
 	}
@@ -123,21 +123,21 @@
 			rows.push(
 				'<tr data-history-id="' + id + '">' +
 					'<td data-label="Time">' + escapeHtml(entry.created_at) + '</td>' +
-					'<td data-label="EndPoint">' + escapeHtml(entry.extension) + '</td>' +
+					'<td data-label="Extension">' + escapeHtml(entry.extension) + '</td>' +
 					'<td data-label="From">' + escapeHtml(displayLabel(entry.from_state)) + '</td>' +
 					'<td data-label="To">' + escapeHtml(displayLabel(entry.to_state)) + '</td>' +
 					'<td data-label="Source">' + escapeHtml(displayLabel(entry.source)) + '</td>' +
 					'<td data-label="Reason">' + escapeHtml(displayLabel(entry.reason)) + '</td>' +
 					'<td data-label="Latency">' + latency + '</td>' +
-					'<td data-label="Actions"><button type="button" class="btn btn-xs btn-danger em-delete-status-history" data-history-id="' + id + '" title="Delete Status History row"><i class="fa fa-trash"></i></button></td>' +
+					'<td data-label="Actions"><button type="button" class="btn btn-xs btn-danger rw-delete-status-history" data-history-id="' + id + '" title="Delete Status History row"><i class="fa fa-trash"></i></button></td>' +
 				'</tr>'
 			);
 		});
 
-		$('.em-history tbody').html(rows.join(''));
-		$('.em-history-empty').toggle(rows.length === 0);
-		$('.em-history-wrap').toggle(rows.length > 0);
-		$(document).trigger('endpointmonitor:history-rendered');
+		$('.rw-history tbody').html(rows.join(''));
+		$('.rw-history-empty').toggle(rows.length === 0);
+		$('.rw-history-wrap').toggle(rows.length > 0);
+		$(document).trigger('registrationwatch:history-rendered');
 	}
 
 	function renderAlertHistoryRows(history) {
@@ -147,39 +147,40 @@
 			rows.push(
 				'<tr data-history-id="' + id + '">' +
 					'<td data-label="Time">' + escapeHtml(entry.sent_at) + '</td>' +
-					'<td data-label="EndPoint">' + escapeHtml(entry.extension) + '</td>' +
+					'<td data-label="Extension">' + escapeHtml(entry.extension) + '</td>' +
 					'<td data-label="Type">' + escapeHtml(displayLabel(entry.alert_type)) + '</td>' +
 					'<td data-label="Status">' + escapeHtml(displayLabel(entry.status)) + '</td>' +
 					'<td data-label="Recipient">' + escapeHtml(entry.recipient) + '</td>' +
 					'<td data-label="Result">' + escapeHtml(displayLabel(entry.result)) + '</td>' +
 					'<td data-label="Error">' + escapeHtml(entry.error) + '</td>' +
-					'<td data-label="Actions"><button type="button" class="btn btn-xs btn-danger em-delete-alert-history" data-history-id="' + id + '" title="Delete Alert History row"><i class="fa fa-trash"></i></button></td>' +
+					'<td data-label="Actions"><button type="button" class="btn btn-xs btn-danger rw-delete-alert-history" data-history-id="' + id + '" title="Delete Alert History row"><i class="fa fa-trash"></i></button></td>' +
 				'</tr>'
 			);
 		});
 
-		$('.em-alert-history tbody').html(rows.join(''));
-		$('.em-alert-history-empty').toggle(rows.length === 0);
-		$('.em-alert-history-wrap').toggle(rows.length > 0);
-		$(document).trigger('endpointmonitor:history-rendered');
+		$('.rw-alert-history tbody').html(rows.join(''));
+		$('.rw-alert-history-empty').toggle(rows.length === 0);
+		$('.rw-alert-history-wrap').toggle(rows.length > 0);
+		$(document).trigger('registrationwatch:history-rendered');
 	}
 
 	function alertSettingsPayload(command, csrfToken) {
 		return {
 			command: command,
 			token: csrfToken,
-			alert_enabled: $('#em-alert-enabled').is(':checked') ? 1 : 0,
-			alert_recipients: $('#em-alert-recipients').val(),
-			alert_on_unreachable: $('#em-alert-on-unreachable').is(':checked') ? 1 : 0,
-			alert_on_not_registered: $('#em-alert-on-not-registered').is(':checked') ? 1 : 0,
-			alert_on_recovery: $('#em-alert-on-recovery').is(':checked') ? 1 : 0,
-			debounce_seconds: $('#em-debounce-seconds').val(),
-			repeat_suppression_seconds: $('#em-repeat-suppression-seconds').val()
+			alert_enabled: $('#rw-alert-enabled').is(':checked') ? 1 : 0,
+			alert_recipients: $('#rw-alert-recipients').val(),
+			alert_on_unreachable: $('#rw-alert-on-unreachable').is(':checked') ? 1 : 0,
+			alert_on_not_registered: $('#rw-alert-on-not-registered').is(':checked') ? 1 : 0,
+			alert_on_recovery: $('#rw-alert-on-recovery').is(':checked') ? 1 : 0,
+			debounce_seconds: $('#rw-debounce-seconds').val(),
+			repeat_suppression_seconds: $('#rw-repeat-suppression-seconds').val()
 		};
 	}
 
 	$(function () {
-		var root = $('.endpointmonitor');
+		var root = $('.registrationwatch');
+		var refreshButton = $('#rw-refresh');
 		var refreshInFlight = false;
 		var refreshTimer = null;
 
@@ -187,16 +188,16 @@
 			return parseInt(root.attr('data-poll-interval'), 10) || 0;
 		}
 
-		$('.em-enabled').each(function () {
+		$('.rw-enabled').each(function () {
 			setToggleText($(this));
 		});
 
-		$('.endpointmonitor').on('change', '.em-enabled', function () {
+		$('.registrationwatch').on('change', '.rw-enabled', function () {
 			var input = $(this);
 			var row = input.closest('tr');
 			var extension = row.data('extension');
 			var enabled = input.is(':checked') ? 1 : 0;
-			var token = endpointMonitorToken(root);
+			var token = registrationWatchToken(root);
 
 			if (!token) {
 				input.prop('checked', !enabled);
@@ -207,7 +208,7 @@
 
 			input.prop('disabled', true);
 			$.ajax({
-				url: 'ajax.php?module=endpointmonitor',
+				url: 'ajax.php?module=registrationwatch',
 				method: 'POST',
 				dataType: 'json',
 				data: {
@@ -219,23 +220,22 @@
 			}).done(function (response) {
 				if (!response || !response.status) {
 					input.prop('checked', !enabled);
-					showMessage(response && response.message ? response.message : 'Unable to save EndPoint setting.', 'error');
+					showMessage(response && response.message ? response.message : 'Unable to save watch setting.', 'error');
 				} else {
-					showMessage(response.message || 'EndPoint setting saved.', 'success');
+					showMessage(response.message || 'Watch setting saved.', 'success');
 				}
 				setToggleText(input);
 			}).fail(function () {
 				input.prop('checked', !enabled);
 				setToggleText(input);
-				showMessage('Unable to save EndPoint setting.', 'error');
+				showMessage('Unable to save watch setting.', 'error');
 			}).always(function () {
 				input.prop('disabled', false);
 			});
 		});
 
 		function refreshStatus(isAutomatic) {
-			var button = $('#em-refresh');
-			var token = endpointMonitorToken(root);
+			var token = registrationWatchToken(root);
 			if (!token) {
 				if (!isAutomatic) {
 					showMessage('Security token unavailable. Please reload the page and try again.', 'error');
@@ -246,12 +246,14 @@
 				return;
 			}
 			refreshInFlight = true;
-			button.prop('disabled', true).addClass('disabled');
+			if (refreshButton.length) {
+				refreshButton.prop('disabled', true).addClass('disabled');
+			}
 			if (!isAutomatic) {
-				showMessage('Refreshing EndPoint status.', 'info');
+				showMessage('Refreshing registration status.', 'info');
 			}
 			$.ajax({
-				url: 'ajax.php?module=endpointmonitor',
+				url: 'ajax.php?module=registrationwatch',
 				method: 'POST',
 				dataType: 'json',
 				data: {
@@ -260,12 +262,12 @@
 				}
 			}).done(function (response) {
 				if (!response || !response.status) {
-					showMessage(response && response.message ? response.message : 'Unable to refresh EndPoint status.', 'error');
+					showMessage(response && response.message ? response.message : 'Unable to refresh registration status.', 'error');
 					return;
 				}
-				renderStatusRows(response.endpoints);
-				if (window.EndpointMonitorRenderEndpointMap) {
-					window.EndpointMonitorRenderEndpointMap(response.endpoints);
+				renderStatusRows(response.registrations);
+				if (window.RegistrationWatchRenderRegistrationMap) {
+					window.RegistrationWatchRenderRegistrationMap(response.registrations);
 				}
 				if (response.statusHistory) {
 					renderHistoryRows(response.statusHistory);
@@ -274,19 +276,23 @@
 					renderAlertHistoryRows(response.alertHistory);
 				}
 				if (!isAutomatic) {
-					showMessage(response.message || 'EndPoint status refreshed.', 'success');
+					showMessage(response.message || 'Registration status refreshed.', 'success');
 				}
 			}).fail(function () {
-				showMessage('Unable to refresh EndPoint status.', 'error');
+				showMessage('Unable to refresh registration status.', 'error');
 			}).always(function () {
 				refreshInFlight = false;
-				button.prop('disabled', false).removeClass('disabled');
+				if (refreshButton.length) {
+					refreshButton.prop('disabled', false).removeClass('disabled');
+				}
 			});
 		}
 
-		$('#em-refresh').on('click', function () {
-			refreshStatus(false);
-		});
+		if (refreshButton.length) {
+			refreshButton.on('click', function () {
+				refreshStatus(false);
+			});
+		}
 
 		function stopAutoRefresh() {
 			if (refreshTimer) {
@@ -313,16 +319,16 @@
 			stopAutoRefresh();
 		});
 
-		$('#em-save-alerts').on('click', function () {
+		$('#rw-save-alerts').on('click', function () {
 			var button = $(this);
-			var token = endpointMonitorToken(root);
+			var token = registrationWatchToken(root);
 			if (!token) {
 				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
 				return;
 			}
 			button.prop('disabled', true);
 			$.ajax({
-				url: 'ajax.php?module=endpointmonitor',
+				url: 'ajax.php?module=registrationwatch',
 				method: 'POST',
 				dataType: 'json',
 				data: alertSettingsPayload('savealerts', token)
@@ -340,16 +346,16 @@
 			});
 		});
 
-		$('#em-test-email').off('click.endpointmonitor').on('click.endpointmonitor', function () {
+		$('#rw-test-email').off('click.registrationwatch').on('click.registrationwatch', function () {
 			var button = $(this);
-			var token = endpointMonitorToken(root);
+			var token = registrationWatchToken(root);
 			if (!token) {
 				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
 				return;
 			}
 			button.prop('disabled', true);
 			$.ajax({
-				url: 'ajax.php?module=endpointmonitor',
+				url: 'ajax.php?module=registrationwatch',
 				method: 'POST',
 				dataType: 'json',
 				data: {
@@ -371,15 +377,15 @@
 		});
 
 		function markPruneApplied(button) {
-			var restoreTimer = button.data('endpointmonitor-prune-restore-timer');
+			var restoreTimer = button.data('registrationwatch-prune-restore-timer');
 			if (restoreTimer) {
 				window.clearTimeout(restoreTimer);
 			}
 
 			button.text('✓ Applied');
-			button.data('endpointmonitor-prune-restore-timer', window.setTimeout(function () {
-				updatePruneControlState(button.closest('.em-prune-control'));
-				button.removeData('endpointmonitor-prune-restore-timer');
+			button.data('registrationwatch-prune-restore-timer', window.setTimeout(function () {
+				updatePruneControlState(button.closest('.rw-prune-control'));
+				button.removeData('registrationwatch-prune-restore-timer');
 			}, 3000));
 		}
 
@@ -387,40 +393,40 @@
 			if (resetConfirmation === undefined) {
 				resetConfirmation = true;
 			}
-			var selectedPolicy = String(control.find('.em-prune-policy').val() || 'never').toLowerCase();
+			var selectedPolicy = String(control.find('.rw-prune-policy').val() || 'never').toLowerCase();
 			var activePolicy = String(control.attr('data-active-policy') || 'never').toLowerCase();
 			var isActive = selectedPolicy === activePolicy;
-			var button = control.find('.em-apply-prune');
+			var button = control.find('.rw-apply-prune');
 
 			button.text(isActive ? 'Active' : 'Apply');
 			button.prop('disabled', isActive);
 			button.toggleClass('disabled', isActive);
 			if (resetConfirmation) {
-				control.find('.em-prune-confirm').prop('checked', false);
+				control.find('.rw-prune-confirm').prop('checked', false);
 			}
-			control.find('.em-prune-confirm-wrap').toggle(!isActive && selectedPolicy !== 'never');
+			control.find('.rw-prune-confirm-wrap').toggle(!isActive && selectedPolicy !== 'never');
 		}
 
-		$('.endpointmonitor .em-prune-control').each(function () {
+		$('.registrationwatch .rw-prune-control').each(function () {
 			updatePruneControlState($(this));
 		});
 
-		root.off('change.endpointmonitorPrune', '.em-prune-policy').on('change.endpointmonitorPrune', '.em-prune-policy', function () {
-			var control = $(this).closest('.em-prune-control');
+		root.off('change.registrationwatchPrune', '.rw-prune-policy').on('change.registrationwatchPrune', '.rw-prune-policy', function () {
+			var control = $(this).closest('.rw-prune-control');
 			updatePruneControlState(control);
 		});
 
-		root.off('click.endpointmonitorPrune', '.em-apply-prune').on('click.endpointmonitorPrune', '.em-apply-prune', function () {
+		root.off('click.registrationwatchPrune', '.rw-apply-prune').on('click.registrationwatchPrune', '.rw-apply-prune', function () {
 			var button = $(this);
-			var control = button.closest('.em-prune-control');
+			var control = button.closest('.rw-prune-control');
 			var historyType = control.data('history-type') || '';
-			var policy = String(control.find('.em-prune-policy').val() || 'never').toLowerCase();
+			var policy = String(control.find('.rw-prune-policy').val() || 'never').toLowerCase();
 			var activePolicy = String(control.attr('data-active-policy') || 'never').toLowerCase();
-			var confirmed = control.find('.em-prune-confirm').is(':checked') ? 1 : 0;
-			var token = endpointMonitorToken(root);
+			var confirmed = control.find('.rw-prune-confirm').is(':checked') ? 1 : 0;
+			var token = registrationWatchToken(root);
 			var applied = false;
 
-			if (button.data('endpointmonitor-prune-in-flight')) {
+			if (button.data('registrationwatch-prune-in-flight')) {
 				return;
 			}
 			if (policy === activePolicy) {
@@ -436,9 +442,9 @@
 				return;
 			}
 
-			button.data('endpointmonitor-prune-in-flight', true).prop('disabled', true);
+			button.data('registrationwatch-prune-in-flight', true).prop('disabled', true);
 			$.ajax({
-				url: 'ajax.php?module=endpointmonitor',
+				url: 'ajax.php?module=registrationwatch',
 				method: 'POST',
 				dataType: 'json',
 				data: {
@@ -454,8 +460,8 @@
 					return;
 				}
 
-				control.find('.em-prune-confirm').prop('checked', false);
-				control.find('.em-prune-confirm-wrap').hide();
+				control.find('.rw-prune-confirm').prop('checked', false);
+				control.find('.rw-prune-confirm-wrap').hide();
 				if (response.statusHistory) {
 					renderHistoryRows(response.statusHistory);
 				}
@@ -469,18 +475,18 @@
 			}).fail(function () {
 				showMessage('Unable to save pruning policy.', 'error');
 			}).always(function () {
-				button.removeData('endpointmonitor-prune-in-flight');
-				if (!button.data('endpointmonitor-prune-restore-timer')) {
+				button.removeData('registrationwatch-prune-in-flight');
+				if (!button.data('registrationwatch-prune-restore-timer')) {
 					updatePruneControlState(control, applied);
 				}
 			});
 		});
 
-		root.off('click.endpointmonitorDeleteStatusHistory', '.em-delete-status-history').on('click.endpointmonitorDeleteStatusHistory', '.em-delete-status-history', function () {
+		root.off('click.registrationwatchDeleteStatusHistory', '.rw-delete-status-history').on('click.registrationwatchDeleteStatusHistory', '.rw-delete-status-history', function () {
 			var button = $(this);
 			var id = parseInt(button.data('history-id'), 10) || 0;
-			var token = endpointMonitorToken(root);
-			if (button.data('endpointmonitor-delete-in-flight')) {
+			var token = registrationWatchToken(root);
+			if (button.data('registrationwatch-delete-in-flight')) {
 				return;
 			}
 			if (id <= 0 || !window.confirm('Permanently delete this Status History row?')) {
@@ -491,9 +497,9 @@
 				return;
 			}
 
-			button.data('endpointmonitor-delete-in-flight', true).prop('disabled', true);
+			button.data('registrationwatch-delete-in-flight', true).prop('disabled', true);
 			$.ajax({
-				url: 'ajax.php?module=endpointmonitor',
+				url: 'ajax.php?module=registrationwatch',
 				method: 'POST',
 				dataType: 'json',
 				data: {
@@ -512,15 +518,15 @@
 			}).fail(function () {
 				showMessage('Unable to delete Status History row.', 'error');
 			}).always(function () {
-				button.removeData('endpointmonitor-delete-in-flight').prop('disabled', false);
+				button.removeData('registrationwatch-delete-in-flight').prop('disabled', false);
 			});
 		});
 
-		root.off('click.endpointmonitorDeleteAlertHistory', '.em-delete-alert-history').on('click.endpointmonitorDeleteAlertHistory', '.em-delete-alert-history', function () {
+		root.off('click.registrationwatchDeleteAlertHistory', '.rw-delete-alert-history').on('click.registrationwatchDeleteAlertHistory', '.rw-delete-alert-history', function () {
 			var button = $(this);
 			var id = parseInt(button.data('history-id'), 10) || 0;
-			var token = endpointMonitorToken(root);
-			if (button.data('endpointmonitor-delete-in-flight')) {
+			var token = registrationWatchToken(root);
+			if (button.data('registrationwatch-delete-in-flight')) {
 				return;
 			}
 			if (id <= 0 || !window.confirm('Permanently delete this Alert History row?')) {
@@ -531,9 +537,9 @@
 				return;
 			}
 
-			button.data('endpointmonitor-delete-in-flight', true).prop('disabled', true);
+			button.data('registrationwatch-delete-in-flight', true).prop('disabled', true);
 			$.ajax({
-				url: 'ajax.php?module=endpointmonitor',
+				url: 'ajax.php?module=registrationwatch',
 				method: 'POST',
 				dataType: 'json',
 				data: {
@@ -552,14 +558,14 @@
 			}).fail(function () {
 				showMessage('Unable to delete Alert History row.', 'error');
 			}).always(function () {
-				button.removeData('endpointmonitor-delete-in-flight').prop('disabled', false);
+				button.removeData('registrationwatch-delete-in-flight').prop('disabled', false);
 			});
 		});
 	});
 }(jQuery));
 
 
-/* EndPoint Monitor notes autosave */
+/* Registration Watch notes autosave */
 (function($) {
         if (!$) {
                 return;
@@ -568,9 +574,9 @@
         var noteTimers = {};
         var noteRequestIds = {};
 
-        function endpointMonitorToken() {
-                if (window.EndpointMonitorToken) {
-                        return window.EndpointMonitorToken();
+        function registrationWatchToken() {
+                if (window.RegistrationWatchToken) {
+                        return window.RegistrationWatchToken();
                 }
 
                 return $('input[name="token"]').first().val()
@@ -579,10 +585,10 @@
                         || '';
         }
 
-        function saveEndpointNote(input) {
+        function saveRegistrationNote(input) {
                 var $input = $(input);
                 var extension = $input.data('extension') || '';
-                var $status = $input.closest('td').find('.em-notes-status');
+                var $status = $input.closest('td').find('.rw-notes-status');
                 var value = $input.val() || '';
 
                 if (value.length > 48) {
@@ -595,7 +601,7 @@
                         return;
                 }
 
-                if (!endpointMonitorToken()) {
+                if (!registrationWatchToken()) {
                         $status.text('Save failed');
                         return;
                 }
@@ -606,13 +612,13 @@
                 $status.text('Saving...');
 
                 $.ajax({
-                        url: 'ajax.php?module=endpointmonitor&command=savenotes',
+                        url: 'ajax.php?module=registrationwatch&command=savenotes',
                         method: 'POST',
                         dataType: 'json',
                         data: {
                                 extension: extension,
                                 notes: value,
-                                token: endpointMonitorToken()
+                                token: registrationWatchToken()
                         },
                         timeout: 10000
                 }).done(function(response) {
@@ -637,30 +643,30 @@
                 });
         }
 
-        $(document).on('input', '.endpointmonitor .em-endpoint-notes', function() {
+        $(document).on('input', '.registrationwatch .rw-registration-notes', function() {
                 var input = this;
                 var extension = $(input).data('extension') || '';
 
                 clearTimeout(noteTimers[extension]);
                 noteTimers[extension] = setTimeout(function() {
-                        saveEndpointNote(input);
+                        saveRegistrationNote(input);
                 }, 700);
         });
 })(window.jQuery);
 
 
-/* EndPoint Monitor shared show limits */
+/* Registration Watch shared show limits */
 (function($) {
         if (!$) {
                 return;
         }
 
         var allowedLimits = ['6', '30', '60', '120', 'all'];
-        var currentLimit = String($('#em-map-limit').val() || '6').toLowerCase();
+        var currentLimit = String($('#rw-map-limit').val() || '6').toLowerCase();
 
-        function endpointMonitorToken() {
-                if (window.EndpointMonitorToken) {
-                        return window.EndpointMonitorToken();
+        function registrationWatchToken() {
+                if (window.RegistrationWatchToken) {
+                        return window.RegistrationWatchToken();
                 }
 
                 return $('input[name="token"]').first().val()
@@ -675,22 +681,22 @@
         }
 
         function controlHtml(section) {
-                return '<div class="form-inline em-show-control" data-show-section="' + section + '">'
+                return '<div class="form-inline rw-show-control" data-show-section="' + section + '">'
                         + '<label>Show</label>'
-                        + '<select class="form-control input-sm em-shared-show-limit" style="width:auto;">'
+                        + '<select class="form-control input-sm rw-shared-show-limit" style="width:auto;">'
                         + '<option value="6">6</option>'
                         + '<option value="30">30</option>'
                         + '<option value="60">60</option>'
                         + '<option value="120">120</option>'
                         + '<option value="all">All</option>'
                         + '</select>'
-                        + '<span class="text-muted em-show-count"></span>'
+                        + '<span class="text-muted rw-show-count"></span>'
                         + '</div>';
         }
 
         function panelByTitle(title) {
                 var found = $();
-                $('.endpointmonitor .panel-title').each(function() {
+                $('.registrationwatch .panel-title').each(function() {
                         if ($.trim($(this).text()) === title) {
                                 found = $(this).closest('.panel');
                                 return false;
@@ -701,7 +707,7 @@
 
 	        function installTableControls() {
 	                [
-	                        ['monitored', 'Monitored EndPoints'],
+	                        ['watched', 'Watched extensions'],
 	                        ['status-history', 'Status History'],
 	                        ['alert-history', 'Alert History']
                 ].forEach(function(item) {
@@ -709,7 +715,7 @@
                         var title = item[1];
                         var $panel = panelByTitle(title);
 
-                        if (!$panel.length || $panel.find('.em-show-control').length) {
+                        if (!$panel.length || $panel.find('.rw-show-control').length) {
                                 return;
                         }
 
@@ -719,7 +725,7 @@
 	                        }
 
 	                        var $control = $(controlHtml(section));
-	                        var $slot = $panel.find('.em-history-show-slot[data-show-section="' + section + '"]').first();
+	                        var $slot = $panel.find('.rw-history-show-slot[data-show-section="' + section + '"]').first();
 	                        if ($slot.length) {
 	                                $slot.empty().append($control);
 	                        } else {
@@ -730,7 +736,7 @@
 
         function syncControls(value) {
                 currentLimit = normaliseLimit(value);
-                $('.em-shared-show-limit').val(currentLimit);
+                $('.rw-shared-show-limit').val(currentLimit);
         }
 
         function applyTableLimit($panel) {
@@ -746,30 +752,30 @@
                         $rows.show();
                 }
 
-                $panel.find('.em-show-count').text('Showing ' + shown + ' of ' + total);
+                $panel.find('.rw-show-count').text('Showing ' + shown + ' of ' + total);
         }
 
         function applyAllLimits(triggerMapChange) {
-                ['Monitored EndPoints', 'Status History', 'Alert History'].forEach(function(title) {
+                ['Watched extensions', 'Status History', 'Alert History'].forEach(function(title) {
                         var $panel = panelByTitle(title);
                         if ($panel.length) {
                                 applyTableLimit($panel);
                         }
                 });
 
-                if (triggerMapChange && $('#em-map-limit').length) {
-                        $('#em-map-limit').val(currentLimit).trigger('change');
+                if (triggerMapChange && $('#rw-map-limit').length) {
+                        $('#rw-map-limit').val(currentLimit).trigger('change');
                 }
         }
 
         function saveShowLimit(value) {
-                var token = endpointMonitorToken();
+                var token = registrationWatchToken();
                 if (!token) {
                         return;
                 }
 
                 $.ajax({
-                        url: 'ajax.php?module=endpointmonitor&command=saveshowlimit',
+                        url: 'ajax.php?module=registrationwatch&command=saveshowlimit',
                         method: 'POST',
                         dataType: 'json',
                         data: {
@@ -783,23 +789,23 @@
         $(function() {
                 installTableControls();
 
-                $('#em-map-limit')
-                        .addClass('em-shared-show-limit')
+                $('#rw-map-limit')
+                        .addClass('rw-shared-show-limit')
                         .attr('data-section', 'map');
 
                 syncControls(currentLimit);
                 applyAllLimits(false);
         });
 
-        $(document).on('change', '.em-shared-show-limit', function() {
+        $(document).on('change', '.rw-shared-show-limit', function() {
                 var value = normaliseLimit($(this).val());
 
                 syncControls(value);
-                applyAllLimits(this.id !== 'em-map-limit');
+                applyAllLimits(this.id !== 'rw-map-limit');
                 saveShowLimit(value);
         });
 
-        $(document).on('endpointmonitor:history-rendered', function() {
+        $(document).on('registrationwatch:history-rendered', function() {
                 installTableControls();
                 syncControls(currentLimit);
                 applyAllLimits(false);
@@ -807,17 +813,17 @@
 })(window.jQuery);
 
 
-/* EndPoint Monitor temporary overlay messages */
+/* Registration Watch temporary overlay messages */
 (function($) {
         if (!$) {
                 return;
         }
 
         function toastContainer() {
-                var $container = $('.em-toast-container');
+                var $container = $('.rw-toast-container');
 
                 if (!$container.length) {
-                        $container = $('<div class="em-toast-container" aria-live="polite" aria-atomic="true"></div>');
+                        $container = $('<div class="rw-toast-container" aria-live="polite" aria-atomic="true"></div>');
                         $('body').append($container);
                 }
 
@@ -843,18 +849,18 @@
 
                 type = normaliseType(type);
 
-                var $toast = $('<div class="em-toast"></div>')
-                        .addClass('em-toast-' + type)
+                var $toast = $('<div class="rw-toast"></div>')
+                        .addClass('rw-toast-' + type)
                         .text(message);
 
                 toastContainer().append($toast);
 
                 window.setTimeout(function() {
-                        $toast.addClass('em-toast-visible');
+                        $toast.addClass('rw-toast-visible');
                 }, 20);
 
                 window.setTimeout(function() {
-                        $toast.addClass('em-toast-hiding');
+                        $toast.addClass('rw-toast-hiding');
 
                         window.setTimeout(function() {
                                 $toast.remove();
@@ -862,7 +868,7 @@
                 }, 2800);
         }
 
-        window.EndPointMonitorToast = showToast;
+        window.RegistrationWatchToast = showToast;
 
         function messageTypeFromElement($el) {
                 if ($el.hasClass('alert-danger') || $el.hasClass('alert-error')) {
@@ -883,15 +889,15 @@
         function shouldBridgeElement(el) {
                 var $el = $(el);
 
-                if (!$el.length || !$el.closest('.endpointmonitor').length) {
+                if (!$el.length || !$el.closest('.registrationwatch').length) {
                         return false;
                 }
 
-                if ($el.is('.em-notes-status, .em-show-count, .em-placeholder')) {
+                if ($el.is('.rw-notes-status, .rw-show-count, .rw-placeholder')) {
                         return false;
                 }
 
-                if ($el.closest('.em-notes-status, .em-show-count, .em-placeholder').length) {
+                if ($el.closest('.rw-notes-status, .rw-show-count, .rw-placeholder').length) {
                         return false;
                 }
 
@@ -915,11 +921,11 @@
                         return;
                 }
 
-                if ($el.data('em-toast-message') === message) {
+                if ($el.data('rw-toast-message') === message) {
                         return;
                 }
 
-                $el.data('em-toast-message', message);
+                $el.data('rw-toast-message', message);
                 showToast(message, messageTypeFromElement($el));
                 $el.hide();
         }
@@ -931,13 +937,13 @@
                         bridgeElement(root);
                 }
 
-                $root.find('#em-message, #em-status-message, #em-ajax-message, .em-message, .em-status-message, .em-ajax-message, [id*="message"], [class*="message"]').each(function() {
+                $root.find('#rw-message, #rw-status-message, #rw-ajax-message, .rw-message, .rw-status-message, .rw-ajax-message, [id*="message"], [class*="message"]').each(function() {
                         bridgeElement(this);
                 });
         }
 
         $(function() {
-                var target = document.querySelector('.endpointmonitor');
+                var target = document.querySelector('.registrationwatch');
 
                 if (!target) {
                         return;

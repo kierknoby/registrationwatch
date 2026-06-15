@@ -1,8 +1,8 @@
 <?php
 /**
- * EndPoint Monitor for FreePBX 17.
+ * Registration Watch for FreePBX 17.
  *
- * PJSIP endpoint discovery and current status visibility.
+ * PJSIP registration discovery and current status visibility.
  *
  * @copyright 2026 20 Telecom Ltd (trading as 20tele.com)
  * @license   GPLv3+
@@ -10,17 +10,17 @@
 
 namespace FreePBX\modules;
 
-class Endpointmonitor implements \BMO {
+class Registrationwatch implements \BMO {
 
 	/** Fallback only. Authoritative version lives in module.xml. */
-	const VERSION = '1.1.1';
+	const VERSION = '1.2.0';
 
 	const STATUS_REACHABLE = 'Reachable';
 	const STATUS_UNREACHABLE = 'Unreachable';
 	const STATUS_REGISTERED_NO_QUALIFY = 'Registered (no qualify)';
 	const STATUS_UNKNOWN = 'Unknown';
 	const STATUS_NOT_REGISTERED = 'Not registered';
-	const CSRF_SESSION_KEY = 'endpointmonitor_csrf_token';
+	const CSRF_SESSION_KEY = 'registrationwatch_csrf_token';
 	const ALERT_TIMING_MAX_SECONDS = 86400;
 	const ALERT_STALE_TRANSITION_MAX_SECONDS = 300;
 
@@ -55,22 +55,22 @@ class Endpointmonitor implements \BMO {
 	public function backup(): array {
 		$backup = [
 			'settings' => [],
-			'endpoints' => [],
+			'registrations' => [],
 		];
 
 		try {
 			$db = $this->db();
 
 			// Backup settings
-			$stmt = $db->query('SELECT setting_key, setting_value FROM endpointmonitor_settings');
+			$stmt = $db->query('SELECT setting_key, setting_value FROM registrationwatch_settings');
 			if ($stmt) {
 				$backup['settings'] = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 			}
 
-			// Backup endpoints
-			$stmt = $db->query('SELECT * FROM endpointmonitor_endpoints');
+			// Backup stored registrations
+			$stmt = $db->query('SELECT * FROM registrationwatch_registrations');
 			if ($stmt) {
-				$backup['endpoints'] = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+				$backup['registrations'] = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 			}
 		} catch (\Exception $e) {
 			$this->logError('Backup failed: ' . $e->getMessage());
@@ -92,7 +92,7 @@ class Endpointmonitor implements \BMO {
 			if (isset($backup['settings']) && is_array($backup['settings'])) {
 				foreach ($backup['settings'] as $row) {
 					$stmt = $db->prepare(
-						'INSERT INTO endpointmonitor_settings (setting_key, setting_value, updated_at)
+						'INSERT INTO registrationwatch_settings (setting_key, setting_value, updated_at)
 						VALUES (:setting_key, :setting_value, :updated_at)
 						ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)'
 					);
@@ -104,11 +104,11 @@ class Endpointmonitor implements \BMO {
 				}
 			}
 
-			// Restore endpoints (preserve discovery flags)
-			if (isset($backup['endpoints']) && is_array($backup['endpoints'])) {
-				foreach ($backup['endpoints'] as $row) {
+			// Restore stored registrations (preserve discovery flags)
+			if (isset($backup['registrations']) && is_array($backup['registrations'])) {
+				foreach ($backup['registrations'] as $row) {
 					$stmt = $db->prepare(
-						'INSERT INTO endpointmonitor_endpoints
+						'INSERT INTO registrationwatch_registrations
 							(extension, description, notes, notes_updated_at, enabled, discovered, last_known_status, contact_uri,
 							 source_ip, source_port, transport, user_agent, device_name, firmware_version,
 							 contact_expires_at, qualify_frequency, last_heartbeat_at, latency_ms,
@@ -178,9 +178,9 @@ class Endpointmonitor implements \BMO {
 
 	public function getVersion(): string {
 		try {
-			$info = \FreePBX::Modules()->getInfo('endpointmonitor');
-			if (isset($info['endpointmonitor']['version'])) {
-				return (string)$info['endpointmonitor']['version'];
+			$info = \FreePBX::Modules()->getInfo('registrationwatch');
+			if (isset($info['registrationwatch']['version'])) {
+				return (string)$info['registrationwatch']['version'];
 			}
 		} catch (\Exception $e) {
 			// Module metadata may be unavailable during early install.
@@ -194,7 +194,7 @@ class Endpointmonitor implements \BMO {
 
 		return load_view(__DIR__ . '/views/main.php', [
 			'moduleVersion' => $this->getVersion(),
-			'endpoints' => $data['endpoints'],
+			'registrations' => $data['registrations'],
 			'statusHistory' => $data['statusHistory'],
 			'alertSettings' => $data['alertSettings'],
 			'pruneSettings' => $this->getPruneSettings(),
@@ -271,14 +271,14 @@ class Endpointmonitor implements \BMO {
 
 			return [
 				'status' => $data['refreshError'] === '',
-				'message' => $data['refreshError'] === '' ? _('EndPoint status refreshed.') : $data['refreshError'],
-				'endpoints' => $data['endpoints'],
+				'message' => $data['refreshError'] === '' ? _('Registration status refreshed.') : $data['refreshError'],
+				'registrations' => $data['registrations'],
 				'statusHistory' => $data['statusHistory'],
 				'alertHistory' => $data['alertHistory'],
 				'lastRefresh' => $data['lastRefresh'],
 			];
 		} catch (\Exception $e) {
-			$message = _('Failed to refresh EndPoint status. Please check the system logs.');
+			$message = _('Failed to refresh registration status. Please check the system logs.');
 			$this->logError('Refresh failed: ' . $e->getMessage());
 			return ['status' => false, 'message' => $message];
 		}
@@ -289,12 +289,12 @@ class Endpointmonitor implements \BMO {
 		$enabled = !empty($_REQUEST['enabled']) ? 1 : 0;
 
 		if ($extension === '') {
-			return ['status' => false, 'message' => _('Missing EndPoint.')];
+			return ['status' => false, 'message' => _('Missing extension.')];
 		}
 
-		$this->syncDiscoveredEndpoints();
+		$this->syncDiscoveredRegistrations();
 		$db = $this->db();
-		$stmt = $db->prepare('UPDATE endpointmonitor_endpoints SET enabled = :enabled, updated_at = :updated_at WHERE extension = :extension');
+		$stmt = $db->prepare('UPDATE registrationwatch_registrations SET enabled = :enabled, updated_at = :updated_at WHERE extension = :extension');
 		$stmt->execute([
 			':enabled' => $enabled,
 			':updated_at' => $this->now(),
@@ -303,8 +303,8 @@ class Endpointmonitor implements \BMO {
 
 		return [
 			'status' => true,
-			'message' => $enabled ? _('EndPoint selected.') : _('EndPoint selection cleared.'),
-			'endpoint' => $extension,
+			'message' => $enabled ? _('Extension selected.') : _('Extension selection cleared.'),
+			'registration' => $extension,
 			'enabled' => $enabled,
 		];
 	}
@@ -314,7 +314,7 @@ class Endpointmonitor implements \BMO {
 		$notes = isset($_REQUEST['notes']) ? (string)$_REQUEST['notes'] : '';
 
 		if ($extension === '') {
-			return ['status' => false, 'message' => _('Missing EndPoint.')];
+			return ['status' => false, 'message' => _('Missing extension.')];
 		}
 
 		$notes = trim(preg_replace('/\s+/', ' ', $notes));
@@ -328,7 +328,7 @@ class Endpointmonitor implements \BMO {
 		$notesUpdatedAt = $notes === '' ? null : $now;
 
 		$stmt = $this->db()->prepare(
-			'UPDATE endpointmonitor_endpoints
+			'UPDATE registrationwatch_registrations
 			SET notes = :notes,
 				notes_updated_at = :notes_updated_at,
 				updated_at = :updated_at
@@ -343,7 +343,7 @@ class Endpointmonitor implements \BMO {
 
 		return [
 			'status' => true,
-			'message' => $notes === '' ? _('EndPoint note cleared.') : _('EndPoint note saved.'),
+			'message' => $notes === '' ? _('Extension note cleared.') : _('Extension note saved.'),
 			'extension' => $extension,
 			'notes' => $notes,
 			'notes_updated_at' => $notesUpdatedAt,
@@ -360,7 +360,7 @@ class Endpointmonitor implements \BMO {
 
 		$now = $this->now();
 		$stmt = $this->db()->prepare(
-			'INSERT INTO endpointmonitor_settings (setting_key, setting_value, updated_at)
+			'INSERT INTO registrationwatch_settings (setting_key, setting_value, updated_at)
 			VALUES (:setting_key, :setting_value, :updated_at)
 			ON DUPLICATE KEY UPDATE
 				setting_value = VALUES(setting_value),
@@ -453,8 +453,8 @@ class Endpointmonitor implements \BMO {
 		$sent = 0;
 		$failed = 0;
 		foreach ($recipients as $recipient) {
-			$subject = _('EndPoint Monitor: test email');
-			$message = "EndPoint Monitor test email\n\nTime: " . $now . "\nSource: manual test\n\nPlease note: Email \"From:\" Address has been configured in Advanced Settings.\n";
+			$subject = _('Registration Watch: test email');
+			$message = "Registration Watch test email\n\nTime: " . $now . "\nSource: manual test\n\nPlease note: Email \"From:\" Address has been configured in Advanced Settings.\n";
 			$result = $this->sendEmail($recipient, $subject, $message);
 			if ($result['status']) {
 				$sent++;
@@ -492,22 +492,22 @@ class Endpointmonitor implements \BMO {
 	}
 
 	private function handleGetTopology(): array {
-		// Read-only action: returns stored endpoint, status-history, and alert-history data only.
+		// Read-only action: returns stored registration, status-history, and alert-history data only.
 		// Do not trigger discovery, reconciliation, history writes, or alerts here.
 		try {
 			return [
 				'status' => true,
-				'endpoints' => $this->getEndpointMapRows(),
+				'registrations' => $this->getRegistrationMapRows(),
 				'statusHistory' => $this->getStatusHistory(),
 				'alertHistory' => $this->getAlertHistory(),
 				'timestamp' => $this->now(),
 			];
 		} catch (\Exception $e) {
-			$this->logWarning('Endpoint map retrieval failed: ' . $e->getMessage());
+			$this->logWarning('Registration map retrieval failed: ' . $e->getMessage());
 			return [
 				'status' => false,
-				'message' => _('Unable to load EndPoint map.'),
-				'endpoints' => [],
+				'message' => _('Unable to load registration map.'),
+				'registrations' => [],
 				'statusHistory' => [],
 				'alertHistory' => [],
 			];
@@ -570,7 +570,7 @@ class Endpointmonitor implements \BMO {
 				return ['status' => false, 'message' => _('Confirm the selected Status History row deletion.')];
 			}
 
-			$stmt = $this->db()->prepare('DELETE FROM endpointmonitor_status_history WHERE id = :id LIMIT 1');
+			$stmt = $this->db()->prepare('DELETE FROM registrationwatch_status_history WHERE id = :id LIMIT 1');
 			$stmt->execute([':id' => $id]);
 			$deleted = $stmt->rowCount();
 
@@ -593,7 +593,7 @@ class Endpointmonitor implements \BMO {
 				return ['status' => false, 'message' => _('Confirm the selected Alert History row deletion.')];
 			}
 
-			$stmt = $this->db()->prepare('DELETE FROM endpointmonitor_alert_history WHERE id = :id LIMIT 1');
+			$stmt = $this->db()->prepare('DELETE FROM registrationwatch_alert_history WHERE id = :id LIMIT 1');
 			$stmt->execute([':id' => $id]);
 			$deleted = $stmt->rowCount();
 
@@ -616,12 +616,12 @@ class Endpointmonitor implements \BMO {
 				$this->reconcileCurrentStatus();
 			} catch (\Exception $e) {
 				$this->logError('Status reconciliation failed: ' . $e->getMessage());
-				$refreshError = _('Unable to reconcile EndPoint status. Please check the system logs.');
+				$refreshError = _('Unable to reconcile registration status. Please check the system logs.');
 			}
 		}
 
 		return [
-			'endpoints' => $this->getStoredEndpoints(),
+			'registrations' => $this->getStoredRegistrations(),
 			'statusHistory' => $this->getStatusHistory(),
 			'alertSettings' => $this->getAlertSettings(),
 			'alertHistory' => $this->getAlertHistory(),
@@ -645,19 +645,19 @@ class Endpointmonitor implements \BMO {
 		}
 		return $interval;
 	}
-	private function syncDiscoveredEndpoints(): void {
+	private function syncDiscoveredRegistrations(): void {
 		$now = $this->now();
-		$discovered = $this->discoverPjsipEndpoints();
+		$discovered = $this->discoverPjsipRegistrations();
 		$db = $this->db();
 
-		foreach ($discovered as $endpoint) {
-			$stmt = $db->prepare('SELECT id FROM endpointmonitor_endpoints WHERE extension = :extension');
-			$stmt->execute([':extension' => $endpoint['extension']]);
+		foreach ($discovered as $registration) {
+			$stmt = $db->prepare('SELECT id FROM registrationwatch_registrations WHERE extension = :extension');
+			$stmt->execute([':extension' => $registration['extension']]);
 			$id = $stmt->fetchColumn();
 
 			if ($id) {
 				$update = $db->prepare(
-					'UPDATE endpointmonitor_endpoints
+					'UPDATE registrationwatch_registrations
 					SET description = :description,
 						discovered = 1,
 						last_discovered_at = :last_discovered_at,
@@ -665,23 +665,23 @@ class Endpointmonitor implements \BMO {
 					WHERE extension = :extension'
 				);
 				$update->execute([
-					':description' => $endpoint['description'],
+					':description' => $registration['description'],
 					':last_discovered_at' => $now,
 					':updated_at' => $now,
-					':extension' => $endpoint['extension'],
+					':extension' => $registration['extension'],
 				]);
 				continue;
 			}
 
 			$insert = $db->prepare(
-				'INSERT INTO endpointmonitor_endpoints
+				'INSERT INTO registrationwatch_registrations
 					(extension, description, enabled, discovered, last_known_status, created_at, updated_at, first_discovered_at, last_discovered_at)
 				VALUES
 					(:extension, :description, 0, 1, :last_known_status, :created_at, :updated_at, :first_discovered_at, :last_discovered_at)'
 			);
 			$insert->execute([
-				':extension' => $endpoint['extension'],
-				':description' => $endpoint['description'],
+				':extension' => $registration['extension'],
+				':description' => $registration['description'],
 				':last_known_status' => self::STATUS_UNKNOWN,
 				':created_at' => $now,
 				':updated_at' => $now,
@@ -690,18 +690,18 @@ class Endpointmonitor implements \BMO {
 			]);
 		}
 
-		$extensions = array_map(function ($endpoint) {
-			return $endpoint['extension'];
+		$extensions = array_map(function ($registration) {
+			return $registration['extension'];
 		}, $discovered);
 
-		$existing = $this->getStoredEndpoints();
+		$existing = $this->getStoredRegistrations();
 		foreach ($existing as $row) {
 			if (in_array($row['extension'], $extensions, true)) {
 				continue;
 			}
 
 			$stmt = $db->prepare(
-				'UPDATE endpointmonitor_endpoints
+				'UPDATE registrationwatch_registrations
 				SET discovered = 0,
 					contact_uri = NULL,
 					latency_ms = NULL,
@@ -717,7 +717,7 @@ class Endpointmonitor implements \BMO {
 		}
 	}
 
-	private function discoverPjsipEndpoints(): array {
+	private function discoverPjsipRegistrations(): array {
 		if (!$this->tableExists('devices') && !$this->tableExists('users')) {
 			return [];
 		}
@@ -725,10 +725,10 @@ class Endpointmonitor implements \BMO {
 		// FreePBX/PBXact 17 does not always store keyword=type/data=endpoint
 		// rows in pjsip. Treat pjsip rows as supporting evidence only; the
 		// FreePBX devices table is the authoritative source for extension devices.
-		$pjsipEndpointIds = $this->getPjsipEndpointIds();
-		$descriptions = $this->getEndpointDescriptions();
+		$pjsipRegistrationTargets = $this->getPjsipRegistrationTargets();
+		$descriptions = $this->getRegistrationDescriptions();
 		$seen = [];
-		$endpoints = [];
+		$registrations = [];
 		$ids = [];
 
 		if ($this->tableExists('devices')) {
@@ -739,9 +739,9 @@ class Endpointmonitor implements \BMO {
 		if (!$ids && $this->tableExists('users')) {
 			$stmt = $this->db()->query("SELECT extension FROM users WHERE extension <> '' ORDER BY extension");
 			$ids = $stmt ? $stmt->fetchAll(\PDO::FETCH_COLUMN, 0) : [];
-			if ($pjsipEndpointIds) {
-				$ids = array_filter($ids, function ($id) use ($pjsipEndpointIds) {
-					return isset($pjsipEndpointIds[trim((string)$id)]);
+			if ($pjsipRegistrationTargets) {
+				$ids = array_filter($ids, function ($id) use ($pjsipRegistrationTargets) {
+					return isset($pjsipRegistrationTargets[trim((string)$id)]);
 				});
 			}
 		}
@@ -752,35 +752,35 @@ class Endpointmonitor implements \BMO {
 				continue;
 			}
 			$seen[$extension] = true;
-			$endpoints[] = [
+			$registrations[] = [
 				'extension' => $extension,
 				'description' => $descriptions[$extension] ?? '',
 			];
 		}
 
-		return $endpoints;
+		return $registrations;
 	}
 
-	private function getPjsipEndpointIds(): array {
+	private function getPjsipRegistrationTargets(): array {
 		if (!$this->tableExists('pjsip')) {
 			return [];
 		}
 
 		$stmt = $this->db()->query("SELECT DISTINCT id FROM pjsip WHERE keyword = 'type' AND data = 'endpoint'");
 		$ids = $stmt ? $stmt->fetchAll(\PDO::FETCH_COLUMN, 0) : [];
-		$endpoints = [];
+		$registrations = [];
 
 		foreach ($ids as $id) {
 			$id = trim((string)$id);
 			if ($id !== '') {
-				$endpoints[$id] = true;
+				$registrations[$id] = true;
 			}
 		}
 
-		return $endpoints;
+		return $registrations;
 	}
 
-	private function getEndpointDescriptions(): array {
+	private function getRegistrationDescriptions(): array {
 		$db = $this->db();
 		$descriptions = [];
 
@@ -805,34 +805,34 @@ class Endpointmonitor implements \BMO {
 	}
 
 	private function reconcileCurrentStatus(): void {
-		$this->syncDiscoveredEndpoints();
+		$this->syncDiscoveredRegistrations();
 
 		$contacts = $this->getLiveContacts();
 		$registrarDetails = $this->getRegistrarContactDetails();
 		$now = $this->now();
 		$db = $this->db();
-		$endpoints = $this->getStoredEndpoints();
+		$registrations = $this->getStoredRegistrations();
 
-		foreach ($endpoints as $endpoint) {
-			if ((int)$endpoint['discovered'] === 0) {
+		foreach ($registrations as $registration) {
+			if ((int)$registration['discovered'] === 0) {
 				continue;
 			}
 
-			$previousStatus = $this->normaliseState($endpoint['last_known_status'] ?? self::STATUS_UNKNOWN);
-			$previousContactUri = $endpoint['contact_uri'] ?? null;
-			$previousHadContact = $this->hadRegisteredState($previousStatus) || (string)($endpoint['contact_uri'] ?? '') !== '';
-			$contact = $contacts[$endpoint['extension']] ?? null;
+			$previousStatus = $this->normaliseState($registration['last_known_status'] ?? self::STATUS_UNKNOWN);
+			$previousContactUri = $registration['contact_uri'] ?? null;
+			$previousHadContact = $this->hadRegisteredState($previousStatus) || (string)($registration['contact_uri'] ?? '') !== '';
+			$contact = $contacts[$registration['extension']] ?? null;
 			$status = self::STATUS_NOT_REGISTERED;
 			$contactUri = null;
 			$latency = null;
-			$sourceIp = $endpoint['source_ip'] ?? null;
-			$sourcePort = $endpoint['source_port'] ?? null;
-			$userAgent = $endpoint['user_agent'] ?? null;
-			$deviceName = $endpoint['device_name'] ?? null;
-			$firmwareVersion = $endpoint['firmware_version'] ?? null;
-			$contactExpiresAt = $endpoint['contact_expires_at'] ?? null;
-			$qualifyFrequency = $endpoint['qualify_frequency'] ?? null;
-			$lastSeen = $endpoint['last_seen_at'] ?: null;
+			$sourceIp = $registration['source_ip'] ?? null;
+			$sourcePort = $registration['source_port'] ?? null;
+			$userAgent = $registration['user_agent'] ?? null;
+			$deviceName = $registration['device_name'] ?? null;
+			$firmwareVersion = $registration['firmware_version'] ?? null;
+			$contactExpiresAt = $registration['contact_expires_at'] ?? null;
+			$qualifyFrequency = $registration['qualify_frequency'] ?? null;
+			$lastSeen = $registration['last_seen_at'] ?: null;
 
 			if ($contact !== null) {
 				$status = $contact['status'];
@@ -844,7 +844,7 @@ class Endpointmonitor implements \BMO {
 				}
 			}
 
-			$registrar = $registrarDetails[(string)$endpoint['extension']] ?? [];
+			$registrar = $registrarDetails[(string)$registration['extension']] ?? [];
 			if ($registrar) {
 				$contactUri = $registrar['contact_uri'] ?? $contactUri;
 				$sourceIp = $registrar['source_ip'] ?? $sourceIp;
@@ -863,7 +863,7 @@ class Endpointmonitor implements \BMO {
 				}
 
 				$this->insertStatusHistory(
-					(string)$endpoint['extension'],
+					(string)$registration['extension'],
 					$previousStatus,
 					$status,
 					$this->historyReason($previousHadContact, $status),
@@ -874,7 +874,7 @@ class Endpointmonitor implements \BMO {
 			}
 
 			$stmt = $db->prepare(
-				'UPDATE endpointmonitor_endpoints
+				'UPDATE registrationwatch_registrations
 				SET last_known_status = :last_known_status,
 					contact_uri = :contact_uri,
 					latency_ms = :latency_ms,
@@ -904,7 +904,7 @@ class Endpointmonitor implements \BMO {
 				':last_seen_at' => $lastSeen,
 				':last_checked_at' => $now,
 				':updated_at' => $now,
-				':extension' => $endpoint['extension'],
+				':extension' => $registration['extension'],
 			]);
 		}
 
@@ -1076,7 +1076,7 @@ class Endpointmonitor implements \BMO {
 		return $this->parseAddressHostPort(rawurldecode($matches[1]));
 	}
 
-	private function endpointAddressDetails(?string $contactUri, $sourceIp = null, $sourcePort = null): array {
+	private function registrationAddressDetails(?string $contactUri, $sourceIp = null, $sourcePort = null): array {
 		$contactAddress = $this->parseContactUriAddress($contactUri);
 		$originalAddress = $this->parseContactUriOriginalHostAddress($contactUri);
 		$hasOriginalAddress = $originalAddress['host'] !== null || $originalAddress['port'] !== null;
@@ -1272,7 +1272,7 @@ class Endpointmonitor implements \BMO {
 	}
 
 	public function getTopologyGroups(): array {
-		$endpoints = $this->getStoredEndpoints();
+		$registrations = $this->getStoredRegistrations();
 		$groups = [
 			'VPN' => [],
 			'WAN' => [],
@@ -1280,12 +1280,12 @@ class Endpointmonitor implements \BMO {
 			'Unknown' => [],
 		];
 
-		foreach ($endpoints as $endpoint) {
-			if ((int)$endpoint['discovered'] === 0) {
+		foreach ($registrations as $registration) {
+			if ((int)$registration['discovered'] === 0) {
 				continue;
 			}
 
-			$sourceIp = $endpoint['source_ip'] ?? null;
+			$sourceIp = $registration['source_ip'] ?? null;
 			$group = $this->classifyNetworkGroup($sourceIp);
 
 			// Check if group is a VPN network group
@@ -1293,9 +1293,9 @@ class Endpointmonitor implements \BMO {
 				if (!isset($groups[$group])) {
 					$groups[$group] = [];
 				}
-				$groups[$group][] = $endpoint;
+				$groups[$group][] = $registration;
 			} else {
-				$groups[$group][] = $endpoint;
+				$groups[$group][] = $registration;
 			}
 		}
 
@@ -1309,7 +1309,7 @@ class Endpointmonitor implements \BMO {
 
 	private function insertStatusHistory(string $extension, ?string $fromState, string $toState, string $reason, ?string $contactUri, ?float $latency, string $createdAt): int {
 		$stmt = $this->db()->prepare(
-			'INSERT INTO endpointmonitor_status_history
+			'INSERT INTO registrationwatch_status_history
 				(extension, from_state, to_state, source, reason, contact_uri, latency_ms, created_at)
 			VALUES
 				(:extension, :from_state, :to_state, :source, :reason, :contact_uri, :latency_ms, :created_at)'
@@ -1337,15 +1337,15 @@ class Endpointmonitor implements \BMO {
 		try {
 			$debounceSeconds = min(self::ALERT_TIMING_MAX_SECONDS, max(0, (int)$settings['debounce_seconds']));
 			$cutoff = date('Y-m-d H:i:s', strtotime($now) - $debounceSeconds);
-			// Endpoint alerts are allowed only for fresh eligible transitions.
+			// Alerts are allowed only for fresh eligible registration transitions.
 			// The stale window is debounce_seconds plus 300 seconds, so old
 			// status-history rows cannot be replayed later after recipient or
 			// settings changes, while legitimate debounce delays still work.
 			$staleCutoff = date('Y-m-d H:i:s', strtotime($now) - ($debounceSeconds + self::ALERT_STALE_TRANSITION_MAX_SECONDS));
 			$stmt = $this->db()->prepare(
 				'SELECT h.id, h.extension, h.from_state, h.to_state, h.source, h.reason, h.contact_uri, h.latency_ms, h.created_at
-				FROM endpointmonitor_status_history h
-				JOIN endpointmonitor_endpoints e
+				FROM registrationwatch_status_history h
+				JOIN registrationwatch_registrations e
 					ON e.extension = h.extension
 				WHERE h.source = :source
 					AND h.created_at <= :cutoff
@@ -1447,7 +1447,7 @@ class Endpointmonitor implements \BMO {
         private function hasRecordedAlertForRecipient(int $historyId, string $alertType, string $recipient): bool {
                 $stmt = $this->db()->prepare(
                         'SELECT COUNT(*)
-                        FROM endpointmonitor_alert_history
+                        FROM registrationwatch_alert_history
                         WHERE history_id = :history_id
                                 AND alert_type = :alert_type
                                 AND recipient = :recipient'
@@ -1470,7 +1470,7 @@ class Endpointmonitor implements \BMO {
 		$since = date('Y-m-d H:i:s', strtotime($now) - $seconds);
 		$stmt = $this->db()->prepare(
 			'SELECT COUNT(*)
-			FROM endpointmonitor_alert_history
+			FROM registrationwatch_alert_history
 			WHERE extension = :extension
 				AND alert_type = :alert_type
 				AND recipient = :recipient
@@ -1588,12 +1588,12 @@ class Endpointmonitor implements \BMO {
 				continue;
 			}
 
-			$endpoint = (string)($payload['endpoint'] ?? '');
-			if ($endpoint === '' && preg_match('#^/registrar/contact/([^;]+)#', $key, $matches)) {
-				$endpoint = (string)$matches[1];
+			$registration = (string)($payload['endpoint'] ?? '');
+			if ($registration === '' && preg_match('#^/registrar/contact/([^;]+)#', $key, $matches)) {
+				$registration = (string)$matches[1];
 			}
 
-			if ($endpoint === '') {
+			if ($registration === '') {
 				continue;
 			}
 
@@ -1605,7 +1605,7 @@ class Endpointmonitor implements \BMO {
 				$expiresAt = date('Y-m-d H:i:s', (int)$payload['expiration_time']);
 			}
 
-			$details[$endpoint] = [
+			$details[$registration] = [
 				'contact_uri' => isset($payload['uri']) && $payload['uri'] !== '' ? (string)$payload['uri'] : null,
 				'source_ip' => isset($payload['via_addr']) && $payload['via_addr'] !== '' ? (string)$payload['via_addr'] : null,
 				'source_port' => isset($payload['via_port']) && is_numeric($payload['via_port']) ? (int)$payload['via_port'] : null,
@@ -1622,13 +1622,13 @@ class Endpointmonitor implements \BMO {
 		return $details;
 	}
 
-	private function getStoredEndpoints(): array {
+	private function getStoredRegistrations(): array {
 		$stmt = $this->db()->query(
 			'SELECT extension, description, notes, notes_updated_at, enabled, discovered, last_known_status, contact_uri,
 				source_ip, source_port, transport, user_agent, device_name, firmware_version,
 				contact_expires_at, qualify_frequency, last_heartbeat_at, latency_ms, last_seen_at,
 				last_checked_at, first_discovered_at, last_discovered_at
-			FROM endpointmonitor_endpoints
+			FROM registrationwatch_registrations
 			ORDER BY extension'
 		);
 
@@ -1637,36 +1637,36 @@ class Endpointmonitor implements \BMO {
 			return [];
 		}
 
-		return array_map([$this, 'withEndpointDisplayAddress'], $rows);
+		return array_map([$this, 'withRegistrationDisplayAddress'], $rows);
 	}
 
-	private function getEndpointMapRows(): array {
+	private function getRegistrationMapRows(): array {
 		$rows = [];
-		foreach ($this->getStoredEndpoints() as $endpoint) {
-			if ((int)$endpoint['discovered'] === 0) {
+		foreach ($this->getStoredRegistrations() as $registration) {
+			if ((int)$registration['discovered'] === 0) {
 				continue;
 			}
 			$rows[] = [
-				'extension' => $endpoint['extension'],
-				'description' => $endpoint['description'],
-				'enabled' => (int)$endpoint['enabled'],
-				'status' => $endpoint['last_known_status'],
-				'contact_uri' => $endpoint['contact_uri'],
-				'source_ip' => $endpoint['source_ip'],
-				'source_port' => $endpoint['source_port'] ?? null,
-				'device_ip' => $endpoint['device_ip'] ?? null,
-				'device_port' => $endpoint['device_port'] ?? null,
-				'network_ip' => $endpoint['network_ip'] ?? null,
-				'network_port' => $endpoint['network_port'] ?? null,
-				'seen_by_asterisk' => $endpoint['seen_by_asterisk'] ?? null,
-				'user_agent' => $endpoint['user_agent'] ?? null,
-				'device_name' => $endpoint['device_name'] ?? null,
-				'firmware_version' => $endpoint['firmware_version'] ?? null,
-				'contact_expires_at' => $endpoint['contact_expires_at'] ?? null,
-				'qualify_frequency' => $endpoint['qualify_frequency'] ?? null,
-				'latency_ms' => $endpoint['latency_ms'],
-				'last_seen_at' => $endpoint['last_seen_at'],
-				'last_checked_at' => $endpoint['last_checked_at'],
+				'extension' => $registration['extension'],
+				'description' => $registration['description'],
+				'enabled' => (int)$registration['enabled'],
+				'status' => $registration['last_known_status'],
+				'contact_uri' => $registration['contact_uri'],
+				'source_ip' => $registration['source_ip'],
+				'source_port' => $registration['source_port'] ?? null,
+				'device_ip' => $registration['device_ip'] ?? null,
+				'device_port' => $registration['device_port'] ?? null,
+				'network_ip' => $registration['network_ip'] ?? null,
+				'network_port' => $registration['network_port'] ?? null,
+				'seen_by_asterisk' => $registration['seen_by_asterisk'] ?? null,
+				'user_agent' => $registration['user_agent'] ?? null,
+				'device_name' => $registration['device_name'] ?? null,
+				'firmware_version' => $registration['firmware_version'] ?? null,
+				'contact_expires_at' => $registration['contact_expires_at'] ?? null,
+				'qualify_frequency' => $registration['qualify_frequency'] ?? null,
+				'latency_ms' => $registration['latency_ms'],
+				'last_seen_at' => $registration['last_seen_at'],
+				'last_checked_at' => $registration['last_checked_at'],
 			];
 		}
 
@@ -1674,7 +1674,7 @@ class Endpointmonitor implements \BMO {
 	}
 
 	private function getLastRefreshTime(): string {
-		$stmt = $this->db()->query('SELECT MAX(last_checked_at) FROM endpointmonitor_endpoints');
+		$stmt = $this->db()->query('SELECT MAX(last_checked_at) FROM registrationwatch_registrations');
 		$value = $stmt ? $stmt->fetchColumn() : '';
 		return $value ? (string)$value : '';
 	}
@@ -1682,7 +1682,7 @@ class Endpointmonitor implements \BMO {
 	private function getStatusHistory(): array {
 		$stmt = $this->db()->query(
 			'SELECT id, extension, from_state, to_state, source, reason, contact_uri, latency_ms, created_at
-			FROM endpointmonitor_status_history
+			FROM registrationwatch_status_history
 			ORDER BY created_at DESC, id DESC
 			LIMIT 25'
 		);
@@ -1700,7 +1700,7 @@ class Endpointmonitor implements \BMO {
 	private function getAlertHistory(): array {
 		$stmt = $this->db()->query(
 			'SELECT id, extension, history_id, alert_type, status, recipient, subject, sent_at, result, error
-			FROM endpointmonitor_alert_history
+			FROM registrationwatch_alert_history
 			ORDER BY sent_at DESC, id DESC
 			LIMIT 25'
 		);
@@ -1751,7 +1751,7 @@ class Endpointmonitor implements \BMO {
 			return 0;
 		}
 
-		$stmt = $this->db()->prepare('DELETE FROM endpointmonitor_status_history WHERE created_at < :cutoff');
+		$stmt = $this->db()->prepare('DELETE FROM registrationwatch_status_history WHERE created_at < :cutoff');
 		$stmt->execute([':cutoff' => $cutoff]);
 		return $stmt->rowCount();
 	}
@@ -1762,7 +1762,7 @@ class Endpointmonitor implements \BMO {
 			return 0;
 		}
 
-		$stmt = $this->db()->prepare('DELETE FROM endpointmonitor_alert_history WHERE sent_at < :cutoff');
+		$stmt = $this->db()->prepare('DELETE FROM registrationwatch_alert_history WHERE sent_at < :cutoff');
 		$stmt->execute([':cutoff' => $cutoff]);
 		return $stmt->rowCount();
 	}
@@ -1825,7 +1825,7 @@ class Endpointmonitor implements \BMO {
 
 	private function getAlertSettings(): array {
 		$settings = $this->settingsDefaults;
-		$stmt = $this->db()->query('SELECT setting_key, setting_value FROM endpointmonitor_settings');
+		$stmt = $this->db()->query('SELECT setting_key, setting_value FROM registrationwatch_settings');
 		if ($stmt) {
 			foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
 				$key = (string)$row['setting_key'];
@@ -1840,7 +1840,7 @@ class Endpointmonitor implements \BMO {
 
 	private function setSetting(string $key, string $value): void {
 		$stmt = $this->db()->prepare(
-			'INSERT INTO endpointmonitor_settings (setting_key, setting_value, updated_at)
+			'INSERT INTO registrationwatch_settings (setting_key, setting_value, updated_at)
 			VALUES (:setting_key, :setting_value, :updated_at)
 			ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = VALUES(updated_at)'
 		);
@@ -1869,37 +1869,37 @@ class Endpointmonitor implements \BMO {
 		return array_values($recipients);
 	}
 
-	private function getEndpointDetails(string $extension): array {
+	private function getRegistrationDetails(string $extension): array {
 		$stmt = $this->db()->prepare(
 			'SELECT extension, description, last_known_status, contact_uri, source_ip, source_port,
 				user_agent, device_name, firmware_version, contact_expires_at,
 				qualify_frequency, last_checked_at
-			FROM endpointmonitor_endpoints
+			FROM registrationwatch_registrations
 			WHERE extension = :extension
 			LIMIT 1'
 		);
 		$stmt->execute([':extension' => $extension]);
 
 		$row = $stmt->fetch(\PDO::FETCH_ASSOC);
-		return is_array($row) ? $this->withEndpointDisplayAddress($row) : [];
+		return is_array($row) ? $this->withRegistrationDisplayAddress($row) : [];
 	}
 
-	private function withEndpointDisplayAddress(array $endpoint): array {
-		$addressDetails = $this->endpointAddressDetails(
-			$endpoint['contact_uri'] ?? null,
-			$endpoint['source_ip'] ?? null,
-			$endpoint['source_port'] ?? null
+	private function withRegistrationDisplayAddress(array $registration): array {
+		$addressDetails = $this->registrationAddressDetails(
+			$registration['contact_uri'] ?? null,
+			$registration['source_ip'] ?? null,
+			$registration['source_port'] ?? null
 		);
-		$endpoint['device_ip'] = $addressDetails['device_ip'];
-		$endpoint['device_port'] = $addressDetails['device_port'];
-		$endpoint['network_ip'] = $addressDetails['network_ip'];
-		$endpoint['network_port'] = $addressDetails['network_port'];
-		$endpoint['seen_by_asterisk'] = $this->formatSeenByAsterisk(
-			$endpoint['source_ip'] ?? null,
-			$endpoint['source_port'] ?? null
+		$registration['device_ip'] = $addressDetails['device_ip'];
+		$registration['device_port'] = $addressDetails['device_port'];
+		$registration['network_ip'] = $addressDetails['network_ip'];
+		$registration['network_port'] = $addressDetails['network_port'];
+		$registration['seen_by_asterisk'] = $this->formatSeenByAsterisk(
+			$registration['source_ip'] ?? null,
+			$registration['source_port'] ?? null
 		);
 
-		return $endpoint;
+		return $registration;
 	}
 
 	private function formatSeenByAsterisk($sourceIp, $sourcePort): ?string {
@@ -1926,26 +1926,26 @@ class Endpointmonitor implements \BMO {
 			$subjectStatus = 'has recovered';
 		}
 
-		$subject = 'EndPoint Monitor: ' . $extension . ' ' . ($alertType === 'recovery' ? $subjectStatus : 'is ' . $subjectStatus);
+		$subject = 'Registration Watch: ' . $extension . ' ' . ($alertType === 'recovery' ? $subjectStatus : 'is ' . $subjectStatus);
 		$latency = $transition['latency_ms'] !== null && $transition['latency_ms'] !== '' ? $transition['latency_ms'] . ' ms' : 'Unavailable';
 		if ($toState === self::STATUS_REGISTERED_NO_QUALIFY) {
 			$latency = 'Unavailable; qualify is not enabled.';
 		}
-		$endpointDetails = $this->getEndpointDetails($extension);
-		$deviceName = trim((string)($endpointDetails['device_name'] ?? ''));
-		$firmwareVersion = trim((string)($endpointDetails['firmware_version'] ?? ''));
-		$userAgent = trim((string)($endpointDetails['user_agent'] ?? ''));
+		$registrationDetails = $this->getRegistrationDetails($extension);
+		$deviceName = trim((string)($registrationDetails['device_name'] ?? ''));
+		$firmwareVersion = trim((string)($registrationDetails['firmware_version'] ?? ''));
+		$userAgent = trim((string)($registrationDetails['user_agent'] ?? ''));
 		$historicalAddress = $toState === self::STATUS_NOT_REGISTERED;
-		$contactUriForAddress = $endpointDetails['contact_uri'] ?? null;
-		$sourceIpForAddress = $endpointDetails['source_ip'] ?? null;
-		$sourcePortForAddress = $endpointDetails['source_port'] ?? null;
+		$contactUriForAddress = $registrationDetails['contact_uri'] ?? null;
+		$sourceIpForAddress = $registrationDetails['source_ip'] ?? null;
+		$sourcePortForAddress = $registrationDetails['source_port'] ?? null;
 		if ($toState === self::STATUS_NOT_REGISTERED) {
 			$contactUriForAddress = $transition['contact_uri'] ?? null;
 		}
-		$addressDetails = $this->endpointAddressDetails($contactUriForAddress, $sourceIpForAddress, $sourcePortForAddress);
+		$addressDetails = $this->registrationAddressDetails($contactUriForAddress, $sourceIpForAddress, $sourcePortForAddress);
 		$addressPrefix = $historicalAddress ? 'Last ' : '';
 		$message = [
-			'EndPoint Monitor state change',
+			'Registration Watch state change',
 			'',
 			'Extension: ' . $extension,
 			'New state: ' . $this->stateLabel($toState),
@@ -1958,8 +1958,8 @@ class Endpointmonitor implements \BMO {
 			$addressPrefix . 'Device Port: ' . (($addressDetails['device_port'] ?? '') !== '' ? $addressDetails['device_port'] : 'Unknown'),
 			$addressPrefix . 'Network IP: ' . (($addressDetails['network_ip'] ?? '') !== '' ? $addressDetails['network_ip'] : 'Unknown'),
 			$addressPrefix . 'Network Port: ' . (($addressDetails['network_port'] ?? '') !== '' ? $addressDetails['network_port'] : 'Unknown'),
-			'Contact expires: ' . (($endpointDetails['contact_expires_at'] ?? '') !== '' ? $endpointDetails['contact_expires_at'] : 'Unknown'),
-			'Qualify frequency: ' . (($endpointDetails['qualify_frequency'] ?? '') !== '' ? $endpointDetails['qualify_frequency'] . ' seconds' : 'Unknown'),
+			'Contact expires: ' . (($registrationDetails['contact_expires_at'] ?? '') !== '' ? $registrationDetails['contact_expires_at'] : 'Unknown'),
+			'Qualify frequency: ' . (($registrationDetails['qualify_frequency'] ?? '') !== '' ? $registrationDetails['qualify_frequency'] . ' seconds' : 'Unknown'),
 			'Transition time: ' . $transition['created_at'],
 			'Source: Asterisk',
 			'',
@@ -2062,10 +2062,10 @@ class Endpointmonitor implements \BMO {
 				return $brand;
 			}
 		} catch (\Exception $e) {
-			// Keep EndPoint Monitor as the sender name fallback.
+			// Keep Registration Watch as the sender name fallback.
 		}
 
-		return 'EndPoint Monitor';
+		return 'Registration Watch';
 	}
 
 	private function emailFromSupportsReturnPath($email): bool {
@@ -2079,7 +2079,7 @@ class Endpointmonitor implements \BMO {
 
 	private function insertAlertHistory(array $alert): void {
 		$stmt = $this->db()->prepare(
-			'INSERT IGNORE INTO endpointmonitor_alert_history
+			'INSERT IGNORE INTO registrationwatch_alert_history
 				(extension, history_id, alert_type, status, recipient, subject, message, sent_at, result, error)
 			VALUES
 				(:extension, :history_id, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
@@ -2100,7 +2100,7 @@ class Endpointmonitor implements \BMO {
 
 	private function reserveAlertHistory(array $alert): bool {
 		$stmt = $this->db()->prepare(
-			'INSERT IGNORE INTO endpointmonitor_alert_history
+			'INSERT IGNORE INTO registrationwatch_alert_history
 				(extension, history_id, alert_type, status, recipient, subject, message, sent_at, result, error)
 			VALUES
 				(:extension, :history_id, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
@@ -2123,7 +2123,7 @@ class Endpointmonitor implements \BMO {
 
 	private function updateReservedAlertHistory(int $historyId, string $alertType, string $recipient, string $result, ?string $error, string $sentAt): void {
 		$stmt = $this->db()->prepare(
-			'UPDATE endpointmonitor_alert_history
+			'UPDATE registrationwatch_alert_history
 			SET sent_at = :sent_at,
 				result = :result,
 				error = :error
@@ -2162,7 +2162,7 @@ class Endpointmonitor implements \BMO {
 			$_SESSION[self::CSRF_SESSION_KEY] = $token;
 			return $token;
 		} catch (\Throwable $e) {
-			$this->logWarning('Unable to create EndPoint Monitor CSRF token: ' . $e->getMessage());
+			$this->logWarning('Unable to create Registration Watch CSRF token: ' . $e->getMessage());
 			return '';
 		}
 	}
@@ -2201,7 +2201,7 @@ class Endpointmonitor implements \BMO {
 	private function logError(string $message): void {
 		try {
 			if (method_exists('\FreePBX', 'Log')) {
-				\FreePBX::Log()->error('endpointmonitor: ' . $message);
+				\FreePBX::Log()->error('registrationwatch: ' . $message);
 			}
 		} catch (\Exception $e) {
 			// Logging unavailable; silently continue
@@ -2211,7 +2211,7 @@ class Endpointmonitor implements \BMO {
 	private function logWarning(string $message): void {
 		try {
 			if (method_exists('\FreePBX', 'Log')) {
-				\FreePBX::Log()->warning('endpointmonitor: ' . $message);
+				\FreePBX::Log()->warning('registrationwatch: ' . $message);
 			}
 		} catch (\Exception $e) {
 			// Logging unavailable; silently continue
@@ -2227,7 +2227,7 @@ class Endpointmonitor implements \BMO {
 			$interval = (int)($settings['topology_poll_interval_seconds'] ?? 10);
 			if ($interval <= 0) {
 				if ($output && method_exists($output, 'writeln')) {
-					$output->writeln('EndPoint Monitor background job skipped: polling disabled.');
+					$output->writeln('Registration Watch background job skipped: polling disabled.');
 				}
 				return true;
 			}
@@ -2236,9 +2236,9 @@ class Endpointmonitor implements \BMO {
 
 			if ($output && method_exists($output, 'writeln')) {
 				if (($settings['alert_enabled'] ?? '0') === '1') {
-					$output->writeln('EndPoint Monitor background job completed.');
+					$output->writeln('Registration Watch background job completed.');
 				} else {
-					$output->writeln('EndPoint Monitor background job completed; alerts disabled.');
+					$output->writeln('Registration Watch background job completed; alerts disabled.');
 				}
 			}
 
@@ -2247,7 +2247,7 @@ class Endpointmonitor implements \BMO {
 			$this->logError('Background job failed: ' . $e->getMessage());
 
 			if ($output && method_exists($output, 'writeln')) {
-				$output->writeln('<error>EndPoint Monitor background job failed: ' . $e->getMessage() . '</error>');
+				$output->writeln('<error>Registration Watch background job failed: ' . $e->getMessage() . '</error>');
 			}
 
 			return false;

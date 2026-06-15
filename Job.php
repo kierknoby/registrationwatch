@@ -1,6 +1,6 @@
 <?php
 
-namespace FreePBX\modules\Endpointmonitor;
+namespace FreePBX\modules\Registrationwatch;
 
 use FreePBX;
 use FreePBX\Job\TaskInterface;
@@ -11,9 +11,9 @@ use Throwable;
 class Job implements TaskInterface {
         public static function run(InputInterface $input, OutputInterface $output) {
                 try {
-                        return FreePBX::Endpointmonitor()->runBackgroundMonitor($output);
+                        return FreePBX::Registrationwatch()->runBackgroundMonitor($output);
                 } catch (Throwable $e) {
-                        $output->writeln('<error>EndPoint Monitor background job failed: ' . $e->getMessage() . '</error>');
+                        $output->writeln('<error>Registration Watch background job failed: ' . $e->getMessage() . '</error>');
                         return false;
                 }
         }

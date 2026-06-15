@@ -1,0 +1,469 @@
+/**
+ * Registration Watch scaffold styles.
+ * Keep this light and let FreePBX/Bootstrap provide the main admin styling.
+ */
+
+.registrationwatch .rw-ready {
+	margin-top: 12px;
+}
+
+.registrationwatch .rw-message {
+	margin-top: 12px;
+}
+
+.registrationwatch .rw-section {
+	margin-top: 18px;
+}
+
+.registrationwatch .rw-section h3 {
+	margin-top: 0;
+}
+
+.registrationwatch .rw-placeholder {
+	color: #555;
+}
+
+.registrationwatch .rw-toggle {
+	font-weight: normal;
+	margin: 0;
+}
+
+.registrationwatch .rw-toggle input {
+	margin-right: 6px;
+}
+
+.registrationwatch .rw-status-value {
+	font-weight: 600;
+}
+
+.registrationwatch .rw-current-status-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.registrationwatch .rw-current-status-heading .panel-title {
+	margin: 0;
+}
+
+.registrationwatch .rw-current-status-action {
+	flex: 0 0 auto;
+}
+
+.registrationwatch .rw-contact-uri {
+	max-width: 420px;
+	overflow-wrap: anywhere;
+}
+
+.registrationwatch .rw-actions {
+	margin-top: 16px;
+}
+
+.registrationwatch .rw-prune-control {
+	margin-bottom: 12px;
+	flex: 1 1 auto;
+	min-width: 260px;
+}
+
+.registrationwatch .rw-prune-inline {
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.registrationwatch .rw-prune-control label {
+	margin-right: 6px;
+}
+
+.registrationwatch .rw-history-control-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 12px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid #eee;
+}
+
+.registrationwatch .rw-history-show-slot {
+	display: flex;
+	justify-content: flex-end;
+	flex: 0 0 auto;
+	margin-left: auto;
+}
+
+.registrationwatch .rw-prune-confirm-wrap {
+	margin-top: 8px;
+}
+
+.registrationwatch .rw-status-item {
+	margin-bottom: 8px;
+}
+
+.registrationwatch .rw-status-warning {
+	margin-top: 10px;
+	padding: 8px;
+	background-color: #fff3cd;
+	border-left: 3px solid #ffc107;
+}
+
+.registrationwatch .rw-registration-map {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 12px;
+}
+
+.registrationwatch .rw-map-tile {
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	padding: 12px;
+	background: #fff;
+	min-height: 150px;
+}
+
+.registrationwatch .rw-map-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 6px;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.registrationwatch .rw-led {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	display: inline-block;
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+	flex: 0 0 12px;
+}
+
+.registrationwatch .rw-led-green {
+	background: #2e7d32;
+}
+
+.registrationwatch .rw-led-amber {
+	background: #f0ad4e;
+}
+
+.registrationwatch .rw-led-red {
+	background: #c9302c;
+}
+
+.registrationwatch .rw-led-grey {
+	background: #9e9e9e;
+}
+
+.registrationwatch .rw-map-description {
+	color: #555;
+	margin-bottom: 8px;
+	min-height: 20px;
+}
+
+.registrationwatch .rw-map-status {
+	font-weight: 600;
+	margin-bottom: 8px;
+}
+
+.registrationwatch .rw-map-detail {
+	color: #555;
+	font-size: 12px;
+	overflow-wrap: anywhere;
+	margin-top: 4px;
+}
+
+
+/* Registration Watch simplified UI */
+.registrationwatch code {
+        color: inherit;
+}
+
+.registrationwatch .rw-show-control {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: nowrap;
+        gap: 6px;
+        margin: 0 0 12px 0;
+        white-space: nowrap;
+}
+
+.registrationwatch .rw-show-control label {
+        margin: 0;
+}
+
+.registrationwatch .rw-show-count {
+        margin-left: 4px;
+}
+
+@media (max-width: 767px) {
+        .registrationwatch .rw-history-control-row {
+                align-items: stretch;
+                flex-direction: column;
+                gap: 10px;
+        }
+
+        .registrationwatch .rw-history-show-slot {
+                justify-content: flex-start;
+                margin-left: 0;
+                width: 100%;
+        }
+
+        .registrationwatch .rw-prune-control {
+                min-width: 0;
+                width: 100%;
+        }
+
+        .registrationwatch .rw-show-control {
+                flex-wrap: wrap;
+                white-space: normal;
+        }
+}
+
+.registrationwatch .rw-led-warning,
+.registrationwatch .rw-led.registered-no-qualify {
+        background-color: #f0ad4e;
+}
+
+.registrationwatch .label-registered-no-qualify,
+.registrationwatch .label-warning {
+        background-color: #f0ad4e;
+}
+
+.rw-watched-registrations-table {
+        table-layout: fixed;
+        width: 100%;
+}
+
+.rw-watched-registrations-table .rw-registration-notes {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+}
+
+.rw-watched-registrations-table .rw-notes-status {
+        display: block;
+        min-height: 18px;
+        margin-top: 4px;
+}
+
+@media (max-width: 767px) {
+	.registrationwatch {
+		overflow-x: hidden;
+	}
+
+	.registrationwatch .panel-body {
+		padding-left: 10px;
+		padding-right: 10px;
+	}
+
+	.registrationwatch .rw-registration-map {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 10px;
+	}
+
+	.registrationwatch .rw-map-tile {
+		min-width: 0;
+		min-height: 0;
+		padding: 10px;
+	}
+
+	.registrationwatch .rw-map-detail,
+	.registrationwatch .rw-map-description,
+	.registrationwatch .rw-map-status {
+		font-size: 13px;
+		overflow-wrap: anywhere;
+	}
+
+	.registrationwatch .rw-registrations-wrap,
+	.registrationwatch .rw-history-wrap,
+	.registrationwatch .rw-alert-history-wrap {
+		border: 0;
+		margin-bottom: 0;
+		overflow-x: visible;
+	}
+
+	.registrationwatch .rw-registrations,
+	.registrationwatch .rw-history,
+	.registrationwatch .rw-alert-history,
+	.registrationwatch .rw-registrations thead,
+	.registrationwatch .rw-history thead,
+	.registrationwatch .rw-alert-history thead,
+	.registrationwatch .rw-registrations tbody,
+	.registrationwatch .rw-history tbody,
+	.registrationwatch .rw-alert-history tbody,
+	.registrationwatch .rw-registrations tr,
+	.registrationwatch .rw-history tr,
+	.registrationwatch .rw-alert-history tr,
+	.registrationwatch .rw-registrations td,
+	.registrationwatch .rw-history td,
+	.registrationwatch .rw-alert-history td {
+		display: block;
+		width: 100%;
+	}
+
+	.registrationwatch .rw-registrations,
+	.registrationwatch .rw-history,
+	.registrationwatch .rw-alert-history {
+		border-collapse: separate;
+		border-spacing: 0;
+	}
+
+	.registrationwatch .rw-registrations thead,
+	.registrationwatch .rw-history thead,
+	.registrationwatch .rw-alert-history thead {
+		display: none;
+	}
+
+	.registrationwatch .rw-registrations tr,
+	.registrationwatch .rw-history tr,
+	.registrationwatch .rw-alert-history tr {
+		margin: 0 0 10px 0;
+		padding: 10px;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+		background: #fff;
+	}
+
+	.registrationwatch .rw-registrations.table-striped > tbody > tr:nth-of-type(odd),
+	.registrationwatch .rw-history.table-striped > tbody > tr:nth-of-type(odd),
+	.registrationwatch .rw-alert-history.table-striped > tbody > tr:nth-of-type(odd) {
+		background-color: #fff;
+	}
+
+	.registrationwatch .rw-registrations td,
+	.registrationwatch .rw-history td,
+	.registrationwatch .rw-alert-history td {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 5px 0;
+		border-top: 0;
+		font-size: 13px;
+		white-space: normal;
+		overflow-wrap: anywhere;
+		word-break: normal;
+	}
+
+	.registrationwatch .rw-registrations td::before,
+	.registrationwatch .rw-history td::before,
+	.registrationwatch .rw-alert-history td::before {
+		content: attr(data-label);
+		flex: 0 0 92px;
+		max-width: 42%;
+		color: #555;
+		font-weight: 600;
+	}
+
+	.registrationwatch .rw-registrations td:nth-child(2),
+	.registrationwatch .rw-history td:nth-child(2),
+	.registrationwatch .rw-alert-history td:nth-child(2) {
+		display: block;
+		order: -2;
+		padding-bottom: 8px;
+		font-size: 15px;
+		font-weight: 600;
+	}
+
+	.registrationwatch .rw-registrations td:nth-child(2)::before,
+	.registrationwatch .rw-history td:nth-child(2)::before,
+	.registrationwatch .rw-alert-history td:nth-child(2)::before {
+		content: none;
+	}
+
+	.registrationwatch .rw-registrations td:nth-child(3) {
+		display: block;
+		order: -1;
+		padding-bottom: 8px;
+		color: #555;
+	}
+
+	.registrationwatch .rw-registrations td:nth-child(3)::before {
+		content: none;
+	}
+
+	.registrationwatch .rw-registrations td:nth-child(4),
+	.registrationwatch .rw-alert-history td:nth-child(5),
+	.registrationwatch .rw-alert-history td:nth-child(7) {
+		display: block;
+	}
+
+	.registrationwatch .rw-registrations td:nth-child(4)::before,
+	.registrationwatch .rw-alert-history td:nth-child(5)::before,
+	.registrationwatch .rw-alert-history td:nth-child(7)::before {
+		display: block;
+		margin-bottom: 3px;
+		max-width: none;
+	}
+
+	.registrationwatch .rw-registration-notes {
+		width: 100%;
+		max-width: 100%;
+		box-sizing: border-box;
+	}
+
+	.registrationwatch .rw-alert-history td,
+	.registrationwatch .rw-history td {
+		word-break: break-word;
+	}
+
+	.registrationwatch .rw-delete-status-history,
+	.registrationwatch .rw-delete-alert-history {
+		min-width: 36px;
+		min-height: 32px;
+	}
+}
+
+
+/* Registration Watch temporary overlay messages */
+.rw-toast-container {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 99999;
+        max-width: 420px;
+        pointer-events: none;
+}
+
+.rw-toast {
+        margin-top: 10px;
+        padding: 12px 16px;
+        border-radius: 4px;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+        color: #fff;
+        background: #444;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 180ms ease, transform 180ms ease;
+        pointer-events: auto;
+}
+
+.rw-toast.rw-toast-visible {
+        opacity: 1;
+        transform: translateY(0);
+}
+
+.rw-toast.rw-toast-hiding {
+        opacity: 0;
+        transform: translateY(8px);
+}
+
+.rw-toast-success {
+        background: #3c763d;
+}
+
+.rw-toast-danger,
+.rw-toast-error {
+        background: #a94442;
+}
+
+.rw-toast-warning {
+        background: #8a6d3b;
+}
+
+.rw-toast-info {
+        background: #31708f;
+}

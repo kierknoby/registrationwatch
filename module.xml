@@ -1,25 +1,18 @@
 <module>
-	<rawname>endpointmonitor</rawname>
+	<rawname>registrationwatch</rawname>
 	<repo>unsupported</repo>
-	<name>EndPoint Monitor</name>
-	<version>1.1.1</version>
+	<name>Registration Watch</name>
+	<version>1.2.0</version>
 	<publisher>20tele.com</publisher>
 	<license>GPLv3+</license>
 	<licenselink>http://www.gnu.org/licenses/gpl-3.0.txt</licenselink>
 	<changelog>
-		*1.1.1* Fixes stale endpoint alert backlog replay, requires selected endpoint alert candidates, aligns duplicate alert checks with alert type, and updates endpoint alert email wording.
-		*1.1.0* Adds history pruning and single-row history deletion with page-load safety and CSRF hardening.
-		*1.0.1* Fixes alert send reservation, duplicate Test Email binding risk, source labels, and release wording.
-		*1.0.0* Adds reconciliation-driven email alert settings and per-recipient alert history using the FreePBX Job system.
-		*0.2.2* Adds transition-based status history during reconciliation without alerting.
-		*0.2.1* Adds FreePBX CSRF validation for AJAX actions, narrows discovery to PJSIP extension devices/users, maps NonQual to Registered (No Qualify), and documents CLI parsing technical debt.
-		*0.2.0* Adds PJSIP endpoint discovery, per-endpoint monitoring toggles, persisted current status fields, and a manual read-only contact refresh.
-		*0.1.0* Initial scaffold-only module shell. Adds FreePBX module identity, install/uninstall hooks, admin page, assets, and placeholder endpoint monitoring sections. No endpoint monitoring logic yet.
+		*1.2.0* Initial Registration Watch release for FreePBX 17. Adds SIP registration status visibility, status history, alert history, and email alerting for watched extensions.
 	</changelog>
-	<category>Admin</category>
-	<description>EndPoint Monitor provides PJSIP endpoint/contact status monitoring and alerting through FreePBX reconciliation jobs.</description>
+	<category>Reports</category>
+	<description>Registration Watch provides SIP registration status visibility, history, and alerting through FreePBX reconciliation jobs.</description>
 	<menuitems>
-		<endpointmonitor>EndPoint Monitor</endpointmonitor>
+		<registrationwatch>Registration Watch</registrationwatch>
 	</menuitems>
 	<depends>
 		<version>17.0</version>
