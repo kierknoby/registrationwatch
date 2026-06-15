@@ -1,5 +1,9 @@
 # EndPoint Monitor for FreePBX 17
 
+## Rename Notice
+
+EndPoint Monitor (`endpointmonitor`) will be renamed **Registration Watch** (`registrationwatch`) in the next release.
+
 ## Current Release
 
 Patch release: 1.1.1, released on 13 June 2026.
@@ -542,4 +546,4 @@ GPLv3+. See LICENSE.
 
 ## Author
 
-@kierknoby, Kieran Byrne // FreePBX UK
+@kierknoby, Kieran Knowles-Byrne // FreePBX UK
