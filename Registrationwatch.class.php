@@ -23,10 +23,29 @@ class Registrationwatch implements \BMO {
 	const CSRF_SESSION_KEY = 'registrationwatch_csrf_token';
 	const ALERT_TIMING_MAX_SECONDS = 86400;
 	const ALERT_STALE_TRANSITION_MAX_SECONDS = 300;
+	const REPEAT_MODE_NEVER = 'never';
+	const REPEAT_MODE_FIVE_MINUTES = '5m';
+	const REPEAT_MODE_HOURLY = 'hourly';
+	const REPEAT_MODE_DAILY = 'daily';
+	const REPEAT_MODE_ESCALATING = 'escalating';
+	const REPEAT_MODE_FIBONACCI = 'fibonacci';
+	const REPEAT_DAILY_SECONDS = 86400;
+	const REPEAT_ESCALATING_SECONDS = [300, 900, 3600, 14400, 86400];
+	const REPEAT_FIBONACCI_BASE_SECONDS = 300;
+	const REPEAT_FIBONACCI_CEILING_SECONDS = 86400;
+	const REPEAT_MODES = [
+		self::REPEAT_MODE_NEVER,
+		self::REPEAT_MODE_FIVE_MINUTES,
+		self::REPEAT_MODE_HOURLY,
+		self::REPEAT_MODE_DAILY,
+		self::REPEAT_MODE_ESCALATING,
+		self::REPEAT_MODE_FIBONACCI,
+	];
 
 	private $settingsDefaults = [
 		'alert_enabled' => '0',
 		'alert_recipients' => '',
+		'repeat_mode' => self::REPEAT_MODE_NEVER,
 		'ui_show_limit' => '6',
 		'alert_on_unreachable' => '1',
 		'alert_on_not_registered' => '1',
@@ -109,13 +128,13 @@ class Registrationwatch implements \BMO {
 				foreach ($backup['registrations'] as $row) {
 					$stmt = $db->prepare(
 						'INSERT INTO registrationwatch_registrations
-							(extension, description, notes, notes_updated_at, enabled, discovered, last_known_status, contact_uri,
+							(extension, description, notes, notes_updated_at, enabled, repeat_mode, discovered, last_known_status, contact_uri,
 							 source_ip, source_port, transport, user_agent, device_name, firmware_version,
 							 contact_expires_at, qualify_frequency, last_heartbeat_at, latency_ms,
 							 last_seen_at, last_checked_at, first_discovered_at, last_discovered_at,
 							 created_at, updated_at)
 						VALUES
-							(:extension, :description, :notes, :notes_updated_at, :enabled, :discovered, :last_known_status, :contact_uri,
+							(:extension, :description, :notes, :notes_updated_at, :enabled, :repeat_mode, :discovered, :last_known_status, :contact_uri,
 							 :source_ip, :source_port, :transport, :user_agent, :device_name, :firmware_version,
 							 :contact_expires_at, :qualify_frequency, :last_heartbeat_at, :latency_ms,
 							 :last_seen_at, :last_checked_at, :first_discovered_at, :last_discovered_at,
@@ -125,6 +144,7 @@ class Registrationwatch implements \BMO {
 							notes = VALUES(notes),
 							notes_updated_at = VALUES(notes_updated_at),
 							enabled = VALUES(enabled),
+							repeat_mode = VALUES(repeat_mode),
 							last_known_status = VALUES(last_known_status),
 							contact_uri = VALUES(contact_uri),
 							source_ip = VALUES(source_ip),
@@ -148,6 +168,9 @@ class Registrationwatch implements \BMO {
 						':notes' => isset($row['notes']) ? substr((string)$row['notes'], 0, 48) : '',
 						':notes_updated_at' => $row['notes_updated_at'] ?? null,
 						':enabled' => $row['enabled'] ?? 1,
+						':repeat_mode' => isset($row['repeat_mode']) && $row['repeat_mode'] !== null && $row['repeat_mode'] !== ''
+							? $this->normaliseRepeatMode((string)$row['repeat_mode'])
+							: null,
 						':discovered' => $row['discovered'] ?? 1,
 						':last_known_status' => $row['last_known_status'] ?? self::STATUS_UNKNOWN,
 						':contact_uri' => $row['contact_uri'] ?? null,
@@ -211,6 +234,7 @@ class Registrationwatch implements \BMO {
 		switch ($req) {
 			case 'refresh':
 			case 'setenabled':
+			case 'setrepeatmode':
 			case 'savenotes':
 			case 'saveshowlimit':
 			case 'savealerts':
@@ -242,6 +266,8 @@ class Registrationwatch implements \BMO {
 				return $this->handleRefresh();
 			case 'setenabled':
 				return $this->handleSetEnabled();
+			case 'setrepeatmode':
+				return $this->handleSetRepeatMode();
 			case 'savenotes':
 				return $this->handleSaveNotes();
 			case 'saveshowlimit':
@@ -306,6 +332,44 @@ class Registrationwatch implements \BMO {
 			'message' => $enabled ? _('Extension selected.') : _('Extension selection cleared.'),
 			'registration' => $extension,
 			'enabled' => $enabled,
+		];
+	}
+
+	private function handleSetRepeatMode(): array {
+		$extension = isset($_REQUEST['extension']) ? trim((string)$_REQUEST['extension']) : '';
+		$rawMode = isset($_REQUEST['repeat_mode']) ? trim((string)$_REQUEST['repeat_mode']) : '';
+
+		if ($extension === '') {
+			return ['status' => false, 'message' => _('Missing extension.')];
+		}
+
+		$repeatMode = $rawMode === '' ? null : $this->normaliseRepeatMode($rawMode);
+		$now = $this->now();
+		$stmt = $this->db()->prepare(
+			'UPDATE registrationwatch_registrations
+			SET repeat_mode = :repeat_mode,
+				updated_at = :updated_at
+			WHERE extension = :extension'
+		);
+		$stmt->execute([
+			':repeat_mode' => $repeatMode,
+			':updated_at' => $now,
+			':extension' => $extension,
+		]);
+
+		$settings = $this->getAlertSettings();
+		$resolvedMode = $this->resolveRepeatMode($repeatMode, $settings);
+		if ($resolvedMode === self::REPEAT_MODE_NEVER) {
+			$stmt = $this->db()->prepare('DELETE FROM registrationwatch_alert_escalation WHERE extension = :extension');
+			$stmt->execute([':extension' => $extension]);
+		}
+
+		return [
+			'status' => true,
+			'message' => _('Repeat alert setting saved.'),
+			'extension' => $extension,
+			'repeat_mode' => $repeatMode,
+			'resolved_repeat_mode' => $resolvedMode,
 		];
 	}
 
@@ -397,6 +461,7 @@ class Registrationwatch implements \BMO {
 		$settings = [
 			'alert_enabled' => !empty($_REQUEST['alert_enabled']) ? '1' : '0',
 			'alert_recipients' => implode(', ', $recipients),
+			'repeat_mode' => $this->normaliseRepeatMode(isset($_REQUEST['repeat_mode']) ? (string)$_REQUEST['repeat_mode'] : $this->settingsDefaults['repeat_mode']),
 			'alert_on_unreachable' => !empty($_REQUEST['alert_on_unreachable']) ? '1' : '0',
 			'alert_on_not_registered' => !empty($_REQUEST['alert_on_not_registered']) ? '1' : '0',
 			'alert_on_recovery' => !empty($_REQUEST['alert_on_recovery']) ? '1' : '0',
@@ -1330,9 +1395,7 @@ class Registrationwatch implements \BMO {
 	private function processAlertQueue(string $now): void {
 		$settings = $this->getAlertSettings();
 		$recipients = $this->normaliseRecipients($settings['alert_recipients']);
-		if ($settings['alert_enabled'] !== '1' || !$recipients) {
-			return;
-		}
+		$canSend = $settings['alert_enabled'] === '1' && (bool)$recipients;
 
 		try {
 			$debounceSeconds = min(self::ALERT_TIMING_MAX_SECONDS, max(0, (int)$settings['debounce_seconds']));
@@ -1343,7 +1406,8 @@ class Registrationwatch implements \BMO {
 			// settings changes, while legitimate debounce delays still work.
 			$staleCutoff = date('Y-m-d H:i:s', strtotime($now) - ($debounceSeconds + self::ALERT_STALE_TRANSITION_MAX_SECONDS));
 			$stmt = $this->db()->prepare(
-				'SELECT h.id, h.extension, h.from_state, h.to_state, h.source, h.reason, h.contact_uri, h.latency_ms, h.created_at
+				'SELECT h.id, h.extension, h.from_state, h.to_state, h.source, h.reason, h.contact_uri, h.latency_ms, h.created_at,
+					e.repeat_mode
 				FROM registrationwatch_status_history h
 				JOIN registrationwatch_registrations e
 					ON e.extension = h.extension
@@ -1361,8 +1425,23 @@ class Registrationwatch implements \BMO {
 			]);
 
 			foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $transition) {
+				if ($this->isRecoveryTransition($transition)) {
+					$this->resetEscalationForRecovery($transition);
+				}
+
 				$alertType = $this->alertTypeForTransition($transition, $settings);
 				if ($alertType === null) {
+					continue;
+				}
+
+				$repeatMode = $this->resolveRepeatMode($transition['repeat_mode'] ?? null, $settings);
+				if ($this->isEscalatingAlertType($alertType)) {
+					$existingEscalation = $this->getActiveEscalationForExtension((string)$transition['extension']);
+					$this->deleteOtherEscalations((string)$transition['extension'], $alertType);
+					$this->upsertEscalationForTransition($transition, $alertType, $repeatMode, $now, $existingEscalation);
+				}
+
+				if (!$canSend) {
 					continue;
 				}
 
@@ -1407,6 +1486,8 @@ class Registrationwatch implements \BMO {
 					);
 				}
 			}
+
+			$this->processDueReminderQueue($now, $settings, $recipients);
 		} catch (\Exception $e) {
 			$this->logError('Alert processing failed: ' . $e->getMessage());
 		}
@@ -1444,13 +1525,305 @@ class Registrationwatch implements \BMO {
 		return null;
 	}
 
+	private function isEscalatingAlertType(string $alertType): bool {
+		return in_array($alertType, ['unreachable', 'not_registered'], true);
+	}
+
+	private function isRecoveryTransition(array $transition): bool {
+		$from = $this->normaliseState($transition['from_state'] ?? '');
+		$to = $this->normaliseState($transition['to_state'] ?? '');
+
+		return in_array($from, [
+			self::STATUS_UNREACHABLE,
+			self::STATUS_NOT_REGISTERED,
+		], true) && in_array($to, [
+			self::STATUS_REACHABLE,
+			self::STATUS_REGISTERED_NO_QUALIFY,
+		], true);
+	}
+
+	private function recoveryEscalationTypesForTransition(array $transition): array {
+		$from = $this->normaliseState($transition['from_state'] ?? '');
+
+		if ($from === self::STATUS_UNREACHABLE) {
+			return ['unreachable'];
+		}
+		if ($from === self::STATUS_NOT_REGISTERED) {
+			return ['not_registered'];
+		}
+
+		return [];
+	}
+
+	private function resetEscalationForRecovery(array $transition): void {
+		$types = $this->recoveryEscalationTypesForTransition($transition);
+		if (!$types) {
+			return;
+		}
+
+		$placeholders = [];
+		$params = [
+			':extension' => (string)$transition['extension'],
+		];
+
+		foreach ($types as $index => $type) {
+			$key = ':type_' . $index;
+			$placeholders[] = $key;
+			$params[$key] = $type;
+		}
+
+		$stmt = $this->db()->prepare(
+			'DELETE FROM registrationwatch_alert_escalation
+			WHERE extension = :extension
+				AND alert_type IN (' . implode(', ', $placeholders) . ')'
+		);
+		$stmt->execute($params);
+	}
+
+	private function resolveRepeatMode(?string $registrationRepeatMode, array $settings): string {
+		$registrationRepeatMode = trim((string)$registrationRepeatMode);
+		if ($registrationRepeatMode !== '') {
+			return $this->normaliseRepeatMode($registrationRepeatMode);
+		}
+
+		return $this->normaliseRepeatMode($settings['repeat_mode'] ?? self::REPEAT_MODE_NEVER);
+	}
+
+	private function getActiveEscalationForExtension(string $extension): array {
+		$stmt = $this->db()->prepare(
+			'SELECT id, extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode
+			FROM registrationwatch_alert_escalation
+			WHERE extension = :extension
+			ORDER BY active_since ASC, id ASC
+			LIMIT 1'
+		);
+		$stmt->execute([':extension' => $extension]);
+		$row = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+		return is_array($row) ? $row : [];
+	}
+
+	private function upsertEscalationForTransition(array $transition, string $alertType, string $repeatMode, string $now, array $existingEscalation = []): void {
+		$extension = (string)$transition['extension'];
+		$repeatMode = $this->normaliseRepeatMode($repeatMode);
+		if ($repeatMode === self::REPEAT_MODE_NEVER) {
+			$this->deleteEscalationsForExtension($extension);
+			return;
+		}
+
+		$alertCount = isset($existingEscalation['alert_count']) ? max(0, (int)$existingEscalation['alert_count']) : 0;
+		$activeSince = !empty($existingEscalation['active_since']) ? (string)$existingEscalation['active_since'] : (string)$transition['created_at'];
+		$lastAlertAt = !empty($existingEscalation['last_alert_at']) ? (string)$existingEscalation['last_alert_at'] : $now;
+		$nextDueAt = !empty($existingEscalation['next_due_at'])
+			? (string)$existingEscalation['next_due_at']
+			: $this->nextRepeatDueAt($now, $repeatMode, $alertCount);
+		if ($nextDueAt === null) {
+			$this->deleteEscalationsForExtension($extension);
+			return;
+		}
+
+		$stmt = $this->db()->prepare(
+			'INSERT INTO registrationwatch_alert_escalation
+				(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode, created_at, updated_at)
+			VALUES
+				(:extension, :history_id, :alert_type, :active_since, :last_alert_at, :alert_count, :next_due_at, :repeat_mode, :created_at, :updated_at)
+			ON DUPLICATE KEY UPDATE
+				history_id = VALUES(history_id),
+				active_since = VALUES(active_since),
+				last_alert_at = VALUES(last_alert_at),
+				alert_count = VALUES(alert_count),
+				next_due_at = VALUES(next_due_at),
+				repeat_mode = VALUES(repeat_mode),
+				updated_at = VALUES(updated_at)'
+		);
+		$stmt->execute([
+			':extension' => $extension,
+			':history_id' => (int)$transition['id'],
+			':alert_type' => $alertType,
+			':active_since' => $activeSince,
+			':last_alert_at' => $lastAlertAt,
+			':alert_count' => $alertCount,
+			':next_due_at' => $nextDueAt,
+			':repeat_mode' => $repeatMode,
+			':created_at' => $now,
+			':updated_at' => $now,
+		]);
+	}
+
+	private function deleteEscalationsForExtension(string $extension): void {
+		$stmt = $this->db()->prepare(
+			'DELETE FROM registrationwatch_alert_escalation
+			WHERE extension = :extension'
+		);
+		$stmt->execute([':extension' => $extension]);
+	}
+
+	private function deleteEscalation(string $extension, string $alertType): void {
+		$stmt = $this->db()->prepare(
+			'DELETE FROM registrationwatch_alert_escalation
+			WHERE extension = :extension
+				AND alert_type = :alert_type'
+		);
+		$stmt->execute([
+			':extension' => $extension,
+			':alert_type' => $alertType,
+		]);
+	}
+
+	private function deleteOtherEscalations(string $extension, string $activeAlertType): void {
+		$stmt = $this->db()->prepare(
+			'DELETE FROM registrationwatch_alert_escalation
+			WHERE extension = :extension
+				AND alert_type <> :alert_type'
+		);
+		$stmt->execute([
+			':extension' => $extension,
+			':alert_type' => $activeAlertType,
+		]);
+	}
+
+	private function processDueReminderQueue(string $now, array $settings, array $recipients): void {
+		if ($settings['alert_enabled'] !== '1' || !$recipients) {
+			return;
+		}
+
+		try {
+			$liveContacts = $this->getLiveContacts();
+		} catch (\Throwable $e) {
+			$this->logWarning('Reminder pass skipped because live registration status is unavailable: ' . $e->getMessage());
+			return;
+		}
+
+		$stmt = $this->db()->prepare(
+			'SELECT a.id, a.extension, a.history_id, a.alert_type, a.active_since, a.last_alert_at,
+				a.alert_count, a.next_due_at, a.repeat_mode,
+				r.last_known_status, r.contact_uri, r.latency_ms, r.enabled
+			FROM registrationwatch_alert_escalation a
+			JOIN registrationwatch_registrations r
+				ON r.extension = a.extension
+			WHERE a.next_due_at <= :now
+				AND r.enabled = 1
+			ORDER BY a.next_due_at ASC, a.id ASC
+			LIMIT 100'
+		);
+		$stmt->execute([':now' => $now]);
+
+		foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+			$currentStatus = $this->currentLiveStatusForReminder($row, $liveContacts);
+			if (!$this->isReminderStillAlertable((string)$row['alert_type'], $currentStatus)) {
+				$this->deleteEscalation((string)$row['extension'], (string)$row['alert_type']);
+				continue;
+			}
+
+			$reminderN = ((int)$row['alert_count']) + 1;
+			$transition = $this->buildReminderTransition($row, $currentStatus, $now);
+			$email = $this->buildAlertEmail($transition, (string)$row['alert_type']);
+
+			foreach ($recipients as $recipient) {
+				$reserved = $this->reserveAlertHistory([
+					'extension' => $row['extension'],
+					'history_id' => (int)$row['history_id'],
+					'reminder_n' => $reminderN,
+					'alert_type' => $row['alert_type'],
+					'status' => $currentStatus,
+					'recipient' => $recipient,
+					'subject' => $email['subject'],
+					'message' => $email['message'],
+					'sent_at' => $now,
+					'result' => 'pending',
+					'error' => null,
+				]);
+				if (!$reserved) {
+					continue;
+				}
+
+				$result = $this->sendEmail($recipient, $email['subject'], $email['message']);
+				if (!$result['status']) {
+					$this->logWarning('Reminder email send failed for ' . $recipient . ' on extension ' . $row['extension'] . ': ' . $result['message']);
+				}
+				$this->updateReservedAlertHistory(
+					(int)$row['history_id'],
+					(string)$row['alert_type'],
+					$recipient,
+					$result['status'] ? 'sent' : 'failed',
+					$result['status'] ? null : $result['message'],
+					$this->now(),
+					$reminderN
+				);
+			}
+
+			$this->markReminderCycleComplete($row, $reminderN, $now);
+		}
+	}
+
+	private function currentLiveStatusForReminder(array $row, array $liveContacts): string {
+		$extension = (string)$row['extension'];
+		if (isset($liveContacts[$extension])) {
+			return $this->normaliseState($liveContacts[$extension]['status'] ?? self::STATUS_UNKNOWN);
+		}
+
+		return self::STATUS_NOT_REGISTERED;
+	}
+
+	private function isReminderStillAlertable(string $alertType, string $currentStatus): bool {
+		$currentStatus = $this->normaliseState($currentStatus);
+		if ($alertType === 'unreachable') {
+			return $currentStatus === self::STATUS_UNREACHABLE;
+		}
+		if ($alertType === 'not_registered') {
+			return $currentStatus === self::STATUS_NOT_REGISTERED;
+		}
+
+		return false;
+	}
+
+	private function buildReminderTransition(array $row, string $currentStatus, string $now): array {
+		return [
+			'id' => (int)$row['history_id'],
+			'extension' => (string)$row['extension'],
+			'from_state' => null,
+			'to_state' => $currentStatus,
+			'source' => 'reconcile',
+			'reason' => 'reminder',
+			'contact_uri' => $row['contact_uri'] ?? null,
+			'latency_ms' => $row['latency_ms'] ?? null,
+			'created_at' => $row['active_since'] ?: $now,
+		];
+	}
+
+	private function markReminderCycleComplete(array $row, int $reminderN, string $now): void {
+		$repeatMode = $this->normaliseRepeatMode($row['repeat_mode'] ?? self::REPEAT_MODE_NEVER);
+		$nextDueAt = $this->nextRepeatDueAt($now, $repeatMode, $reminderN);
+		if ($nextDueAt === null) {
+			$this->deleteEscalation((string)$row['extension'], (string)$row['alert_type']);
+			return;
+		}
+
+		$stmt = $this->db()->prepare(
+			'UPDATE registrationwatch_alert_escalation
+			SET alert_count = :alert_count,
+				last_alert_at = :last_alert_at,
+				next_due_at = :next_due_at,
+				updated_at = :updated_at
+			WHERE id = :id'
+		);
+		$stmt->execute([
+			':alert_count' => $reminderN,
+			':last_alert_at' => $now,
+			':next_due_at' => $nextDueAt,
+			':updated_at' => $now,
+			':id' => (int)$row['id'],
+		]);
+	}
+
         private function hasRecordedAlertForRecipient(int $historyId, string $alertType, string $recipient): bool {
                 $stmt = $this->db()->prepare(
                         'SELECT COUNT(*)
                         FROM registrationwatch_alert_history
                         WHERE history_id = :history_id
                                 AND alert_type = :alert_type
-                                AND recipient = :recipient'
+                                AND recipient = :recipient
+                                AND reminder_n = 0'
                 );
                 $stmt->execute([
                         ':history_id' => $historyId,
@@ -1624,7 +1997,7 @@ class Registrationwatch implements \BMO {
 
 	private function getStoredRegistrations(): array {
 		$stmt = $this->db()->query(
-			'SELECT extension, description, notes, notes_updated_at, enabled, discovered, last_known_status, contact_uri,
+			'SELECT extension, description, notes, notes_updated_at, enabled, repeat_mode, discovered, last_known_status, contact_uri,
 				source_ip, source_port, transport, user_agent, device_name, firmware_version,
 				contact_expires_at, qualify_frequency, last_heartbeat_at, latency_ms, last_seen_at,
 				last_checked_at, first_discovered_at, last_discovered_at
@@ -1650,6 +2023,7 @@ class Registrationwatch implements \BMO {
 				'extension' => $registration['extension'],
 				'description' => $registration['description'],
 				'enabled' => (int)$registration['enabled'],
+				'repeat_mode' => $registration['repeat_mode'] ?? null,
 				'status' => $registration['last_known_status'],
 				'contact_uri' => $registration['contact_uri'],
 				'source_ip' => $registration['source_ip'],
@@ -1811,6 +2185,73 @@ class Registrationwatch implements \BMO {
 		}
 
 		return $seconds;
+	}
+
+	private function normaliseRepeatMode(?string $mode): string {
+		$mode = strtolower(trim((string)$mode));
+		return in_array($mode, self::REPEAT_MODES, true) ? $mode : self::REPEAT_MODE_NEVER;
+	}
+
+	private function repeatIntervalSeconds(string $repeatMode, int $alertCount): ?int {
+		switch ($this->normaliseRepeatMode($repeatMode)) {
+			case self::REPEAT_MODE_FIVE_MINUTES:
+				return 300;
+			case self::REPEAT_MODE_HOURLY:
+				return 3600;
+			case self::REPEAT_MODE_DAILY:
+				return self::REPEAT_DAILY_SECONDS;
+			case self::REPEAT_MODE_ESCALATING:
+				return $this->escalatingRepeatIntervalSeconds($alertCount);
+			case self::REPEAT_MODE_FIBONACCI:
+				return $this->fibonacciRepeatIntervalSeconds($alertCount);
+			case self::REPEAT_MODE_NEVER:
+			default:
+				return null;
+		}
+	}
+
+	private function nextRepeatDueAt(string $lastAlertAt, string $repeatMode, int $alertCount): ?string {
+		$interval = $this->repeatIntervalSeconds($repeatMode, $alertCount);
+		if ($interval === null) {
+			return null;
+		}
+
+		$timestamp = strtotime($lastAlertAt);
+		if ($timestamp === false) {
+			$timestamp = strtotime($this->now());
+		}
+
+		return date('Y-m-d H:i:s', $timestamp + $interval);
+	}
+
+	private function escalatingRepeatIntervalSeconds(int $alertCount): int {
+		$index = max(0, $alertCount - 1);
+		$lastIndex = count(self::REPEAT_ESCALATING_SECONDS) - 1;
+		return self::REPEAT_ESCALATING_SECONDS[min($index, $lastIndex)];
+	}
+
+	// alert_count is the number of reminders already sent. This returns the
+	// wait until the next reminder; Fibonacci deliberately opens with two
+	// 5-minute gaps, then grows on the same 5-minute base up to the daily cap.
+	private function fibonacciRepeatIntervalSeconds(int $alertCount): int {
+		$step = max(1, $alertCount);
+		$previous = 0;
+		$current = 1;
+
+		for ($i = 1; $i < $step; $i++) {
+			$next = $previous + $current;
+			$previous = $current;
+			$current = $next;
+
+			if ($current * self::REPEAT_FIBONACCI_BASE_SECONDS >= self::REPEAT_FIBONACCI_CEILING_SECONDS) {
+				return self::REPEAT_FIBONACCI_CEILING_SECONDS;
+			}
+		}
+
+		return min(
+			self::REPEAT_FIBONACCI_CEILING_SECONDS,
+			$current * self::REPEAT_FIBONACCI_BASE_SECONDS
+		);
 	}
 
 	private function positiveRequestId(string $key): int {
@@ -2080,13 +2521,14 @@ class Registrationwatch implements \BMO {
 	private function insertAlertHistory(array $alert): void {
 		$stmt = $this->db()->prepare(
 			'INSERT IGNORE INTO registrationwatch_alert_history
-				(extension, history_id, alert_type, status, recipient, subject, message, sent_at, result, error)
+				(extension, history_id, reminder_n, alert_type, status, recipient, subject, message, sent_at, result, error)
 			VALUES
-				(:extension, :history_id, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
+				(:extension, :history_id, :reminder_n, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
 		);
 		$stmt->execute([
 			':extension' => $alert['extension'],
 			':history_id' => $alert['history_id'],
+			':reminder_n' => $alert['reminder_n'] ?? 0,
 			':alert_type' => $alert['alert_type'],
 			':status' => $alert['status'],
 			':recipient' => $alert['recipient'],
@@ -2101,13 +2543,14 @@ class Registrationwatch implements \BMO {
 	private function reserveAlertHistory(array $alert): bool {
 		$stmt = $this->db()->prepare(
 			'INSERT IGNORE INTO registrationwatch_alert_history
-				(extension, history_id, alert_type, status, recipient, subject, message, sent_at, result, error)
+				(extension, history_id, reminder_n, alert_type, status, recipient, subject, message, sent_at, result, error)
 			VALUES
-				(:extension, :history_id, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
+				(:extension, :history_id, :reminder_n, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
 		);
 		$stmt->execute([
 			':extension' => $alert['extension'],
 			':history_id' => $alert['history_id'],
+			':reminder_n' => $alert['reminder_n'] ?? 0,
 			':alert_type' => $alert['alert_type'],
 			':status' => $alert['status'],
 			':recipient' => $alert['recipient'],
@@ -2121,7 +2564,7 @@ class Registrationwatch implements \BMO {
 		return $stmt->rowCount() > 0;
 	}
 
-	private function updateReservedAlertHistory(int $historyId, string $alertType, string $recipient, string $result, ?string $error, string $sentAt): void {
+	private function updateReservedAlertHistory(int $historyId, string $alertType, string $recipient, string $result, ?string $error, string $sentAt, int $reminderN = 0): void {
 		$stmt = $this->db()->prepare(
 			'UPDATE registrationwatch_alert_history
 			SET sent_at = :sent_at,
@@ -2129,7 +2572,8 @@ class Registrationwatch implements \BMO {
 				error = :error
 			WHERE history_id = :history_id
 				AND alert_type = :alert_type
-				AND recipient = :recipient'
+				AND recipient = :recipient
+				AND reminder_n = :reminder_n'
 		);
 		$stmt->execute([
 			':sent_at' => $sentAt,
@@ -2138,6 +2582,7 @@ class Registrationwatch implements \BMO {
 			':history_id' => $historyId,
 			':alert_type' => $alertType,
 			':recipient' => $recipient,
+			':reminder_n' => $reminderN,
 		]);
 	}
 
@@ -2288,6 +2733,8 @@ class Registrationwatch implements \BMO {
 				return 'Status changed';
 			case 'removed':
 				return 'Contact removed';
+			case 'reminder':
+				return 'Repeat alert';
 		}
 
 		return $reason !== '' ? $reason : '-';

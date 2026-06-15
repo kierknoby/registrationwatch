@@ -16,6 +16,7 @@ try {
 }
 
 $db->query('DROP TABLE IF EXISTS registrationwatch_settings');
+$db->query('DROP TABLE IF EXISTS registrationwatch_alert_escalation');
 $db->query('DROP TABLE IF EXISTS registrationwatch_alert_history');
 $db->query('DROP TABLE IF EXISTS registrationwatch_status_history');
 $db->query('DROP TABLE IF EXISTS registrationwatch_registrations');

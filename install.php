@@ -14,6 +14,7 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_registrations (
 	notes VARCHAR(48) NOT NULL DEFAULT '',
 	notes_updated_at DATETIME NULL,
 	enabled TINYINT(1) NOT NULL DEFAULT 1,
+	repeat_mode VARCHAR(20) NULL,
 	discovered TINYINT(1) NOT NULL DEFAULT 1,
 	last_known_status VARCHAR(40) NOT NULL DEFAULT 'Unknown',
 	contact_uri TEXT NULL,
@@ -71,6 +72,7 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_history (
 	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 	extension VARCHAR(80) NOT NULL,
 	history_id BIGINT UNSIGNED NULL,
+	reminder_n INT UNSIGNED NOT NULL DEFAULT 0,
 	alert_type VARCHAR(40) NOT NULL,
 	status VARCHAR(40) NOT NULL,
 	recipient VARCHAR(255) NOT NULL,
@@ -82,10 +84,30 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_history (
 	PRIMARY KEY (id),
 	KEY registrationwatch_alert_history_extension (extension),
 	KEY registrationwatch_alert_history_history_id (history_id),
+	KEY registrationwatch_alert_history_reminder_n (reminder_n),
 	KEY registrationwatch_alert_history_alert_type (alert_type),
 	KEY registrationwatch_alert_history_recipient (recipient),
 	KEY registrationwatch_alert_history_sent_at (sent_at),
 	KEY registrationwatch_alert_history_result (result)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+$sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_escalation (
+	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+	extension VARCHAR(80) NOT NULL,
+	history_id BIGINT UNSIGNED NOT NULL,
+	alert_type VARCHAR(40) NOT NULL,
+	active_since DATETIME NOT NULL,
+	last_alert_at DATETIME NULL,
+	alert_count INT UNSIGNED NOT NULL DEFAULT 0,
+	next_due_at DATETIME NOT NULL,
+	repeat_mode VARCHAR(20) NOT NULL,
+	created_at DATETIME NULL,
+	updated_at DATETIME NULL,
+	PRIMARY KEY (id),
+	UNIQUE KEY registrationwatch_alert_escalation_extension_type (extension, alert_type),
+	KEY registrationwatch_alert_escalation_history_id (history_id),
+	KEY registrationwatch_alert_escalation_next_due_at (next_due_at),
+	KEY registrationwatch_alert_escalation_repeat_mode (repeat_mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 foreach ($sql as $statement) {
@@ -95,6 +117,7 @@ foreach ($sql as $statement) {
 $columns = [
 	'notes' => "ALTER TABLE registrationwatch_registrations ADD notes VARCHAR(48) NOT NULL DEFAULT '' AFTER description",
 	'notes_updated_at' => "ALTER TABLE registrationwatch_registrations ADD notes_updated_at DATETIME NULL AFTER notes",
+	'repeat_mode' => "ALTER TABLE registrationwatch_registrations ADD repeat_mode VARCHAR(20) NULL AFTER enabled",
 	'discovered' => "ALTER TABLE registrationwatch_registrations ADD discovered TINYINT(1) NOT NULL DEFAULT 1 AFTER enabled",
 	'last_known_status' => "ALTER TABLE registrationwatch_registrations ADD last_known_status VARCHAR(40) NOT NULL DEFAULT 'Unknown' AFTER discovered",
 	'contact_uri' => "ALTER TABLE registrationwatch_registrations ADD contact_uri TEXT NULL AFTER last_known_status",
@@ -152,6 +175,7 @@ if (!$hasIndex) {
 
 $alertColumns = [
 	'history_id' => "ALTER TABLE registrationwatch_alert_history ADD history_id BIGINT UNSIGNED NULL AFTER extension",
+	'reminder_n' => "ALTER TABLE registrationwatch_alert_history ADD reminder_n INT UNSIGNED NOT NULL DEFAULT 0 AFTER history_id",
 	'alert_type' => "ALTER TABLE registrationwatch_alert_history ADD alert_type VARCHAR(40) NOT NULL DEFAULT '' AFTER history_id",
 	'recipient' => "ALTER TABLE registrationwatch_alert_history ADD recipient VARCHAR(255) NOT NULL DEFAULT '' AFTER status",
 	'subject' => "ALTER TABLE registrationwatch_alert_history ADD subject VARCHAR(255) NOT NULL DEFAULT '' AFTER recipient",
@@ -180,6 +204,7 @@ foreach ($alertColumns as $column => $statement) {
 
 $alertIndexes = [
 	'registrationwatch_alert_history_history_id' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_history_id (history_id)',
+	'registrationwatch_alert_history_reminder_n' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_reminder_n (reminder_n)',
 	'registrationwatch_alert_history_alert_type' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_alert_type (alert_type)',
 	'registrationwatch_alert_history_recipient' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_recipient (recipient)',
 	'registrationwatch_alert_history_sent_at' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_sent_at (sent_at)',
@@ -218,17 +243,20 @@ if ($exists && method_exists($exists, 'fetchColumn')) {
 	$hasIndex = $exists->rowCount() > 0;
 }
 
-if (!$hasIndex) {
-	$db->query(
-		'ALTER TABLE registrationwatch_alert_history
-		 ADD UNIQUE KEY registrationwatch_alert_unique_transition_recipient
-		 (history_id, alert_type, recipient(191))'
-	);
+if ($hasIndex) {
+	$db->query('ALTER TABLE registrationwatch_alert_history DROP INDEX registrationwatch_alert_unique_transition_recipient');
 }
+
+$db->query(
+	'ALTER TABLE registrationwatch_alert_history
+	 ADD UNIQUE KEY registrationwatch_alert_unique_transition_recipient
+	 (history_id, alert_type, recipient(191), reminder_n)'
+);
 
 $defaultSettings = [
 	'alert_enabled' => '0',
 	'alert_recipients' => '',
+	'repeat_mode' => 'never',
 	'ui_show_limit' => '6',
 	'alert_on_unreachable' => '1',
 	'alert_on_not_registered' => '1',

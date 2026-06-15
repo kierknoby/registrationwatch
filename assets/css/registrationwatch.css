@@ -232,18 +232,20 @@
         background-color: #f0ad4e;
 }
 
-.rw-watched-registrations-table {
+.registrationwatch .rw-watched-registrations-table {
         table-layout: fixed;
         width: 100%;
 }
 
-.rw-watched-registrations-table .rw-registration-notes {
+.registrationwatch .rw-watched-registrations-table .rw-registration-notes,
+.registrationwatch .rw-watched-registrations-table .rw-repeat-mode {
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
 }
 
-.rw-watched-registrations-table .rw-notes-status {
+.registrationwatch .rw-watched-registrations-table .rw-notes-status,
+.registrationwatch .rw-watched-registrations-table .rw-repeat-mode-status {
         display: block;
         min-height: 18px;
         margin-top: 4px;
@@ -386,12 +388,14 @@
 	}
 
 	.registrationwatch .rw-registrations td:nth-child(4),
+	.registrationwatch .rw-registrations td:nth-child(5),
 	.registrationwatch .rw-alert-history td:nth-child(5),
 	.registrationwatch .rw-alert-history td:nth-child(7) {
 		display: block;
 	}
 
 	.registrationwatch .rw-registrations td:nth-child(4)::before,
+	.registrationwatch .rw-registrations td:nth-child(5)::before,
 	.registrationwatch .rw-alert-history td:nth-child(5)::before,
 	.registrationwatch .rw-alert-history td:nth-child(7)::before {
 		display: block;

@@ -52,6 +52,18 @@ $emailStatus = isset($emailStatus) && is_array($emailStatus) ? $emailStatus : [
 ];
 $pollIntervalSeconds = isset($pollIntervalSeconds) ? (int)$pollIntervalSeconds : 10;
 $csrfToken = isset($csrfToken) ? (string)$csrfToken : '';
+$repeatModeOptions = [
+	'never' => _('Never'),
+	'5m' => _('Every 5 minutes'),
+	'hourly' => _('Hourly'),
+	'daily' => _('Daily'),
+	'escalating' => _('Escalating (5m → 15m → 1h → 4h → daily)'),
+	'fibonacci' => _('Fibonacci (escalating)'),
+];
+$currentRepeatMode = isset($alertSettings['repeat_mode']) ? strtolower((string)$alertSettings['repeat_mode']) : 'never';
+if (!array_key_exists($currentRepeatMode, $repeatModeOptions)) {
+	$currentRepeatMode = 'never';
+}
 
 $_rwStatusClass = function ($status) {
 	switch (strtolower(trim((string)$status))) {
@@ -92,6 +104,8 @@ $_rwDisplayLabel = function ($value) {
 		'status changed' => 'Status changed',
 		'removed' => 'Contact removed',
 		'contact removed' => 'Contact removed',
+		'reminder' => 'Repeat alert',
+		'repeat alert' => 'Repeat alert',
 		'sent' => 'Sent',
 		'failed' => 'Failed',
 		'suppressed' => 'Suppressed',
@@ -228,12 +242,13 @@ $_rwAssetVer = max(
 						<p class="rw-placeholder"><?php echo _('No PJSIP extensions are stored yet. Use Manual Refresh to discover registrations.'); ?></p>
 					<?php else: ?>
 						<div class="table-responsive rw-registrations-wrap">
-							<table class="table table-striped table-condensed rw-registrations">
+							<table class="table table-striped table-condensed rw-registrations rw-watched-registrations-table">
 								<thead>
 									<tr>
 										<th><?php echo _('Selection'); ?></th>
 										<th><?php echo _('Extension'); ?></th>
 										<th><?php echo _('Description'); ?></th>
+										<th><?php echo _('Repeat alerts'); ?></th>
 										<th><?php echo _('Notes'); ?></th>
 									</tr>
 								</thead>
@@ -248,6 +263,17 @@ $_rwAssetVer = max(
 											</td>
 											<td data-label="<?php echo _('Extension'); ?>"><?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?></td>
 											<td data-label="<?php echo _('Description'); ?>"><?php echo htmlspecialchars($registration['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
+											<td data-label="<?php echo _('Repeat alerts'); ?>">
+												<select class="form-control input-sm rw-repeat-mode" data-extension="<?php echo htmlspecialchars((string)$registration['extension'], ENT_QUOTES, 'UTF-8'); ?>">
+													<option value=""><?php echo _('Use global'); ?></option>
+													<?php foreach ($repeatModeOptions as $modeValue => $modeLabel): ?>
+														<option value="<?php echo htmlspecialchars($modeValue, ENT_QUOTES, 'UTF-8'); ?>" <?php echo isset($registration['repeat_mode']) && (string)$registration['repeat_mode'] === $modeValue ? 'selected' : ''; ?>>
+															<?php echo htmlspecialchars($modeLabel, ENT_QUOTES, 'UTF-8'); ?>
+														</option>
+													<?php endforeach; ?>
+												</select>
+												<small class="text-muted rw-repeat-mode-status"></small>
+											</td>
 											<td data-label="<?php echo _('Notes'); ?>">
 											<input
 												type="text"
@@ -302,6 +328,16 @@ $_rwAssetVer = max(
 								<label for="rw-repeat-suppression-seconds"><?php echo _('Repeat suppression (seconds)'); ?></label>
 								<input type="number" id="rw-repeat-suppression-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['repeat_suppression_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
 								<p class="help-block"><?php echo _('How long to wait before sending another alert for the same extension and alert type. Use 0 to send every eligible alert. Maximum 86400 seconds, 24 hours.'); ?></p>
+							</div>
+							<div class="form-group">
+								<label for="rw-repeat-mode"><?php echo _('Repeat alerts'); ?></label>
+								<select id="rw-repeat-mode" class="form-control">
+									<?php foreach ($repeatModeOptions as $modeValue => $modeLabel): ?>
+										<option value="<?php echo htmlspecialchars($modeValue, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $currentRepeatMode === $modeValue ? 'selected' : ''; ?>>
+											<?php echo htmlspecialchars($modeLabel, ENT_QUOTES, 'UTF-8'); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
 							</div>
 						</div>
 						<div class="col-sm-6">
@@ -544,6 +580,8 @@ $_rwAssetVer = max(
 				sent: 'Sent',
 				failed: 'Failed',
 				suppressed: 'Suppressed',
+				reminder: 'Repeat alert',
+				'repeat alert': 'Repeat alert',
 				pending: 'Pending',
 				test: 'Test'
 			};

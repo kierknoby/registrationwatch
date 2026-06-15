@@ -21,6 +21,8 @@
 			'status changed': 'Status changed',
 			removed: 'Contact removed',
 			'contact removed': 'Contact removed',
+			reminder: 'Repeat alert',
+			'repeat alert': 'Repeat alert',
 			sent: 'Sent',
 			failed: 'Failed',
 			suppressed: 'Suppressed',
@@ -170,6 +172,7 @@
 			token: csrfToken,
 			alert_enabled: $('#rw-alert-enabled').is(':checked') ? 1 : 0,
 			alert_recipients: $('#rw-alert-recipients').val(),
+			repeat_mode: $('#rw-repeat-mode').val(),
 			alert_on_unreachable: $('#rw-alert-on-unreachable').is(':checked') ? 1 : 0,
 			alert_on_not_registered: $('#rw-alert-on-not-registered').is(':checked') ? 1 : 0,
 			alert_on_recovery: $('#rw-alert-on-recovery').is(':checked') ? 1 : 0,
@@ -232,6 +235,63 @@
 			}).always(function () {
 				input.prop('disabled', false);
 			});
+		});
+
+		$('.registrationwatch').on('change', '.rw-repeat-mode', function () {
+			var select = $(this);
+			var row = select.closest('tr');
+			var extension = select.data('extension') || row.data('extension') || '';
+			var repeatMode = select.val() || '';
+			var previous = select.data('previous-value');
+			var status = row.find('.rw-repeat-mode-status');
+			var token = registrationWatchToken(root);
+
+			if (previous === undefined) {
+				previous = '';
+			}
+			if (!extension) {
+				status.text('Save failed');
+				return;
+			}
+			if (!token) {
+				select.val(previous);
+				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
+				return;
+			}
+
+			select.prop('disabled', true);
+			status.text('Saving...');
+			$.ajax({
+				url: 'ajax.php?module=registrationwatch',
+				method: 'POST',
+				dataType: 'json',
+				data: {
+					command: 'setrepeatmode',
+					extension: extension,
+					repeat_mode: repeatMode,
+					token: token
+				}
+			}).done(function (response) {
+				if (!response || !response.status) {
+					select.val(previous);
+					status.text('Save failed');
+					showMessage(response && response.message ? response.message : 'Unable to save repeat alert setting.', 'error');
+					return;
+				}
+				select.data('previous-value', repeatMode);
+				status.text('Saved');
+				showMessage(response.message || 'Repeat alert setting saved.', 'success');
+			}).fail(function () {
+				select.val(previous);
+				status.text('Save failed');
+				showMessage('Unable to save repeat alert setting.', 'error');
+			}).always(function () {
+				select.prop('disabled', false);
+			});
+		});
+
+		$('.rw-repeat-mode').each(function () {
+			$(this).data('previous-value', $(this).val() || '');
 		});
 
 		function refreshStatus(isAutomatic) {

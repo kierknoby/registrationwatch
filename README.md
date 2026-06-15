@@ -5,6 +5,12 @@ FreePBX/PBXact 17. It discovers local PJSIP extensions, records registration
 state changes, and can send email alerts when watched extensions become
 unavailable or recover.
 
+## Development Branch Warning
+
+The `1-2-0_dev` branch is in active development and is not safe for production
+systems. Use the `main` branch unless you are explicitly testing development
+changes.
+
 ## Compatibility
 
 Use with FreePBX/PBXact 17 only. Do not install on FreePBX/PBXact 16 or below.
