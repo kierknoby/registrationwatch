@@ -60,6 +60,10 @@
 	margin-top: 16px;
 }
 
+.registrationwatch .rw-storm-threshold-group {
+	margin-top: 24px;
+}
+
 .registrationwatch .rw-prune-control {
 	margin-bottom: 12px;
 	flex: 1 1 auto;

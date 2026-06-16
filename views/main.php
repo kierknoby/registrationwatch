@@ -246,7 +246,7 @@ $_rwAssetVer = max(
 		<div class="col-sm-12">
 			<div class="panel panel-default">
 				<div class="panel-heading">
-					<h3 class="panel-title"><?php echo _('Watched extensions'); ?></h3>
+					<h3 class="panel-title"><?php echo _('Watched Extensions'); ?></h3>
 				</div>
 				<div class="panel-body">
 					<?php if (empty($registrations)): ?>
@@ -363,21 +363,10 @@ $_rwAssetVer = max(
 									<i class="fa fa-envelope"></i> <?php echo _('Test Email'); ?>
 								</button>
 							</div>
-							<div class="form-group">
+							<div class="form-group rw-storm-threshold-group">
 								<label for="rw-storm-threshold"><?php echo _('Storm Threshold'); ?></label>
 								<input type="number" id="rw-storm-threshold" class="form-control" min="0" max="10000" step="1" value="<?php echo htmlspecialchars($alertSettings['storm_threshold'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
 								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. Use 0 to disable.'); ?></p>
-							</div>
-							<div class="rw-diagnostics">
-								<hr>
-								<h5><?php echo _('Diagnostics'); ?></h5>
-								<p class="help-block">
-									<?php echo _('Module time'); ?>:
-									<span id="rw-module-time"><?php echo htmlspecialchars((string)($timeDiagnostics['module_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
-									|
-									<?php echo _('Database time'); ?>:
-									<span id="rw-database-time"><?php echo htmlspecialchars((string)($timeDiagnostics['database_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
-								</p>
 							</div>
 						</div>
 						<div class="col-sm-6">
@@ -402,7 +391,7 @@ $_rwAssetVer = max(
 									<?php echo _('Hourly: repeat once per hour while unavailable.'); ?><br>
 									<?php echo _('Daily: repeat once per day while unavailable.'); ?><br>
 									<?php echo _('Escalating: 5 minutes, 15 minutes, 1 hour, 4 hours, then daily. Recommended backoff mode.'); ?><br>
-									<?php echo _('Fibonacci: gradual backoff starting short and increasing up to daily, 5m, 5m, 10m, 15m, 25m, 40m, 65m, capped at daily.'); ?>
+									<?php echo _('Fibonacci: Reminders start frequent and gradually space out as an outage continues, settling to once per day, so a long outage does not flood you.'); ?>
 								</p>
 							</div>
 							<p class="help-block"><?php echo _('Per-extension repeat overrides can be set in the Watched extensions table.'); ?></p>
@@ -555,6 +544,14 @@ $_rwAssetVer = max(
 		</div>
 	</div>
 </div>
+
+<p class="rw-time-footer text-muted">
+	<?php echo _('Module time'); ?>:
+	<span id="rw-module-time"><?php echo htmlspecialchars((string)($timeDiagnostics['module_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
+	|
+	<?php echo _('Database time'); ?>:
+	<span id="rw-database-time"><?php echo htmlspecialchars((string)($timeDiagnostics['database_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
+</p>
 
 <script src="modules/registrationwatch/assets/js/registrationwatch.js?v=<?php echo $_rwAssetVer; ?>"></script>
 <script>
