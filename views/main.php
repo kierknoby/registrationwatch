@@ -363,7 +363,7 @@ $_rwAssetVer = max(
 							</div>
 							<div class="form-group">
 								<label for="rw-alert-recipients"><?php echo _('Recipients'); ?></label>
-								<input type="text" id="rw-alert-recipients" class="form-control" value="<?php echo htmlspecialchars($alertSettings['alert_recipients'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="<?php echo _('admin@example.com, support@example.com'); ?>">
+								<textarea id="rw-alert-recipients" class="form-control" rows="3" placeholder="<?php echo _('admin@example.com, support@example.com'); ?>"><?php echo htmlspecialchars($alertSettings['alert_recipients'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
 							</div>
 							<div class="checkbox">
 								<label>
@@ -383,7 +383,7 @@ $_rwAssetVer = max(
 									<?php echo _('Alert when a watched registration recovers'); ?>
 								</label>
 							</div>
-							<div class="form-group">
+							<div class="form-group" style="margin-top:16px;">
 								<label for="rw-debounce-seconds"><?php echo _('Debounce delay (seconds)'); ?></label>
 								<input type="number" id="rw-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
 								<p class="help-block"><?php echo _('How long a problem must remain active before the first alert is sent. The default 0 seconds alerts immediately. Increase this value to reduce noise from short reloads, restarts, and transient network events. Maximum 86400 seconds, 24 hours.'); ?></p>
