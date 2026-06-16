@@ -302,12 +302,23 @@
 		$(document).trigger('registrationwatch:history-rendered');
 	}
 
+	function alertHistoryRowClass(alertType) {
+		var s = $.trim(String(alertType || '')).toLowerCase();
+		if (s === 'recovery') {
+			return 'rw-alert-history-row-ok';
+		}
+		if (s === 'unreachable' || s === 'not_registered' || s === 'not registered') {
+			return 'rw-alert-history-row-bad';
+		}
+		return 'rw-alert-history-row-neutral';
+	}
+
 	function renderAlertHistoryRows(history) {
 		var rows = [];
 		$.each(history || [], function (_, entry) {
 			var id = parseInt(entry.id, 10) || 0;
 			rows.push(
-				'<tr data-history-id="' + id + '">' +
+				'<tr data-history-id="' + id + '" class="' + alertHistoryRowClass(entry.alert_type) + '">' +
 					'<td data-label="Time">' + escapeHtml(entry.sent_at) + '</td>' +
 					'<td data-label="Extension">' + escapeHtml(entry.extension) + '</td>' +
 					'<td data-label="Type">' + escapeHtml(displayLabel(entry.alert_type)) + '</td>' +

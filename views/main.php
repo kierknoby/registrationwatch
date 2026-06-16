@@ -145,6 +145,17 @@ $_rwHistoryRowClass = function ($toState) {
 	return 'rw-history-row-neutral';
 };
 
+$_rwAlertHistoryRowClass = function ($alertType) {
+	$s = strtolower(trim((string)$alertType));
+	if ($s === 'recovery') {
+		return 'rw-alert-history-row-ok';
+	}
+	if ($s === 'unreachable' || $s === 'not_registered' || $s === 'not registered') {
+		return 'rw-alert-history-row-bad';
+	}
+	return 'rw-alert-history-row-neutral';
+};
+
 $_rwContactExpiryText = function ($expiresAt) {
 	$expiresAt = trim((string)$expiresAt);
 	if ($expiresAt === '') {
@@ -564,7 +575,7 @@ $_rwAssetVer = max(
 							</thead>
 							<tbody>
 								<?php foreach ($alertHistory as $entry): ?>
-									<tr data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>">
+									<tr data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>" class="<?php echo $_rwAlertHistoryRowClass($entry['alert_type'] ?? ''); ?>">
 										<td data-label="<?php echo _('Time'); ?>"><?php echo htmlspecialchars($entry['sent_at'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
 										<td data-label="<?php echo _('Extension'); ?>"><?php echo htmlspecialchars($entry['extension'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
 										<td data-label="<?php echo _('Type'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['alert_type'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>

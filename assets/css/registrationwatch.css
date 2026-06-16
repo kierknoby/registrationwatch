@@ -139,6 +139,22 @@
 	background-color: #fff !important;
 }
 
+.registrationwatch .rw-alert-history > tbody > tr > td {
+	background-color: #fff !important;
+}
+
+.registrationwatch .rw-alert-history > tbody > tr.rw-alert-history-row-ok > td {
+	background-color: #dff0d8 !important;
+}
+
+.registrationwatch .rw-alert-history > tbody > tr.rw-alert-history-row-bad > td {
+	background-color: #f2dede !important;
+}
+
+.registrationwatch .rw-alert-history > tbody > tr.rw-alert-history-row-neutral > td {
+	background-color: #fff !important;
+}
+
 .registrationwatch .rw-history-control-row {
 	display: flex;
 	align-items: flex-start;
