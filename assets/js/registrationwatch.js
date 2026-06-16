@@ -206,7 +206,7 @@
 				'<small class="text-muted rw-repeat-mode-status"></small>' +
 			'</td>' +
 			'<td data-label="Notes">' +
-				'<input type="text" class="form-control input-sm rw-registration-notes" data-registration-id="' + id + '" maxlength="48" value="' + escapeHtmlValue(notes) + '" placeholder="Add note...">' +
+				'<input type="text" class="form-control input-sm rw-registration-notes" data-registration-id="' + id + '" maxlength="72" value="' + escapeHtmlValue(notes) + '" placeholder="Add note...">' +
 				'<small class="text-muted rw-notes-status">' + escapeHtmlValue(notesStatus) + '</small>' +
 			'</td>' +
 		'</tr>';

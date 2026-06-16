@@ -178,7 +178,7 @@ class Registrationwatch implements \BMO {
 						':registration_ua_class' => $uaClass,
 						':extension' => $row['extension'],
 						':description' => $row['description'] ?? null,
-						':notes' => isset($row['notes']) ? substr((string)$row['notes'], 0, 48) : '',
+						':notes' => isset($row['notes']) ? substr((string)$row['notes'], 0, 72) : '',
 						':notes_updated_at' => $row['notes_updated_at'] ?? null,
 						':enabled' => $row['enabled'] ?? 1,
 						':auto_disabled_absent_at' => $row['auto_disabled_absent_at'] ?? null,
@@ -399,9 +399,9 @@ class Registrationwatch implements \BMO {
 
 		$notes = trim(preg_replace('/\s+/', ' ', $notes));
 		if (function_exists('mb_substr')) {
-			$notes = mb_substr($notes, 0, 48);
+			$notes = mb_substr($notes, 0, 72);
 		} else {
-			$notes = substr($notes, 0, 48);
+			$notes = substr($notes, 0, 72);
 		}
 
 		$now = $this->now();

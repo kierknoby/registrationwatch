@@ -12,7 +12,7 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_registrations (
 	registration_key CHAR(64) NOT NULL,
 	extension VARCHAR(80) NOT NULL,
 	description VARCHAR(255) NULL,
-	notes VARCHAR(48) NOT NULL DEFAULT '',
+	notes VARCHAR(72) NOT NULL DEFAULT '',
 	notes_updated_at DATETIME NULL,
 	enabled TINYINT(1) NOT NULL DEFAULT 1,
 	auto_disabled_absent_at DATETIME NULL,

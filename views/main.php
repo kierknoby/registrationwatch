@@ -324,7 +324,7 @@ $_rwAssetVer = max(
 												type="text"
 												class="form-control input-sm rw-registration-notes"
 												data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>"
-												maxlength="48"
+												maxlength="72"
 												value="<?php echo htmlspecialchars((string)($registration['notes'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
 												placeholder="<?php echo _('Add note...'); ?>"
 											>
@@ -405,7 +405,7 @@ $_rwAssetVer = max(
 									<?php echo _('Every 5 minutes: repeat every 5 minutes while the registration remains unavailable.'); ?><br>
 									<?php echo _('Hourly: repeat once per hour while unavailable.'); ?><br>
 									<?php echo _('Daily: repeat once per day while unavailable.'); ?><br>
-									<?php echo _('Escalating: Escalating uses a Fibonacci-style backoff schedule, starting with shorter reminders and gradually increasing the interval up to daily.'); ?>
+									<?php echo _('Escalating: uses a Fibonacci-style backoff schedule, starting with shorter reminders and gradually increasing the interval up to daily.'); ?>
 								</p>
 							</div>
 							<p class="help-block"><?php echo _('Per-extension repeat overrides can be set in the Watched Extensions table.'); ?></p>
