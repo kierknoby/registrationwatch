@@ -8,6 +8,10 @@
 		return $('<div>').text(value === null || value === undefined || value === '' ? '-' : String(value)).html();
 	}
 
+	function escapeHtmlValue(value) {
+		return $('<div>').text(value === null || value === undefined ? '' : String(value)).html();
+	}
+
 	function displayLabel(value) {
 		var text = $.trim(String(value || ''));
 		var labels = {
@@ -191,8 +195,8 @@
 				'<small class="text-muted rw-repeat-mode-status"></small>' +
 			'</td>' +
 			'<td data-label="Notes">' +
-				'<input type="text" class="form-control input-sm rw-registration-notes" data-registration-id="' + id + '" maxlength="48" value="' + escapeHtml(notes) + '" placeholder="Add note...">' +
-				'<small class="text-muted rw-notes-status">' + escapeHtml(notesStatus) + '</small>' +
+				'<input type="text" class="form-control input-sm rw-registration-notes" data-registration-id="' + id + '" maxlength="48" value="' + escapeHtmlValue(notes) + '" placeholder="Add note...">' +
+				'<small class="text-muted rw-notes-status">' + escapeHtmlValue(notesStatus) + '</small>' +
 			'</td>' +
 		'</tr>';
 	}
