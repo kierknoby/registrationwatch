@@ -151,6 +151,23 @@ $_rwContactExpiryText = function ($expiresAt) {
 	return (string)$remainingSeconds . 's';
 };
 
+$_rwDisplayContact = function ($value) {
+	$value = trim((string)$value);
+	if ($value === '') {
+		return '-';
+	}
+	$value = trim($value, '<>');
+	if (stripos($value, 'sip:') === 0) {
+		$value = substr($value, 4);
+	} elseif (stripos($value, 'sips:') === 0) {
+		$value = substr($value, 5);
+	}
+	$value = preg_split('/[;?&#>\s]/', $value, 2)[0] ?? '';
+	$value = trim($value);
+
+	return $value !== '' ? $value : '-';
+};
+
 $_rwAssetVer = max(
 	@filemtime(__DIR__ . '/../assets/js/registrationwatch.js') ?: 0,
 	@filemtime(__DIR__ . '/../assets/css/registrationwatch.css') ?: 0
@@ -221,7 +238,7 @@ $_rwAssetVer = max(
 												<div class="rw-map-tile">
 													<div class="rw-map-title">
 														<span class="rw-led <?php echo $_rwStatusClass($registration['last_known_status']); ?>"></span>
-														<span><?php echo htmlspecialchars(($registration['source_ip'] ?? '') !== '' ? (string)$registration['source_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></span>
+														<span><?php echo htmlspecialchars((string)$registration['extension'], ENT_QUOTES, 'UTF-8'); ?></span>
 													</div>
 													<div class="rw-map-description"><?php echo htmlspecialchars($registration['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></div>
 													<div class="rw-map-status"><?php echo htmlspecialchars($_rwDisplayLabel($registration['last_known_status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
@@ -231,7 +248,7 @@ $_rwAssetVer = max(
 													<div class="rw-map-detail"><?php echo _('Network Port'); ?>: <?php echo htmlspecialchars(($registration['network_port'] ?? '') !== '' ? (string)$registration['network_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
 													<div class="rw-map-detail"><?php echo _('Device'); ?>: <?php echo htmlspecialchars(($registration['device_name'] ?? '') !== '' ? (string)$registration['device_name'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 													<div class="rw-map-detail"><?php echo _('Version'); ?>: <?php echo htmlspecialchars(($registration['firmware_version'] ?? '') !== '' ? (string)$registration['firmware_version'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Contact'); ?>: <?php echo htmlspecialchars(($registration['contact_uri'] ?? '') !== '' ? (string)$registration['contact_uri'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
+													<div class="rw-map-detail"><?php echo _('Contact'); ?>: <?php echo htmlspecialchars($_rwDisplayContact($registration['contact_uri'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
 													<div class="rw-map-detail"><?php echo _('Contact expires'); ?>: <?php echo htmlspecialchars($_rwContactExpiryText($registration['contact_expires_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
 													<div class="rw-map-detail"><?php echo _('Qualify'); ?>: <?php echo htmlspecialchars(($registration['qualify_frequency'] ?? '') !== '' ? (string)$registration['qualify_frequency'] . ' seconds' : '-', ENT_QUOTES, 'UTF-8'); ?></div>
 													<div class="rw-map-detail">
@@ -668,6 +685,21 @@ $_rwAssetVer = max(
 			return remainingSeconds + 's';
 		}
 
+		function displayContactUri(value) {
+			let text = String(value || '').trim();
+			if (!text) {
+				return '-';
+			}
+			text = text.replace(/^<|>$/g, '');
+			if (text.toLowerCase().startsWith('sip:')) {
+				text = text.substring(4);
+			} else if (text.toLowerCase().startsWith('sips:')) {
+				text = text.substring(5);
+			}
+			text = text.split(/[;?&#>\s]/, 1)[0].trim();
+			return text || '-';
+		}
+
 		function discoveredRegistrations(registrations) {
 			if (!Array.isArray(registrations)) {
 				return [];
@@ -732,7 +764,7 @@ $_rwAssetVer = max(
 				for (const registration of groups[extension]) {
 					const status = registration.status || registration.last_known_status || 'Unknown';
 					html += '<div class="rw-map-tile">';
-					html += '<div class="rw-map-title"><span class="rw-led ' + statusClass(status) + '"></span><span>' + escapeHtml(registration.source_ip || textUnknown) + '</span></div>';
+					html += '<div class="rw-map-title"><span class="rw-led ' + statusClass(status) + '"></span><span>' + escapeHtml(registration.extension || extension) + '</span></div>';
 					html += '<div class="rw-map-description">' + escapeHtml(registration.description || '-') + '</div>';
 					html += '<div class="rw-map-status">' + escapeHtml(displayLabel(status)) + '</div>';
 					html += '<div class="rw-map-detail">' + escapeHtml(textDeviceIp) + ': ' + escapeHtml(registration.device_ip || textUnknown) + '</div>';
@@ -741,7 +773,7 @@ $_rwAssetVer = max(
 					html += '<div class="rw-map-detail">' + escapeHtml(textNetworkPort) + ': ' + escapeHtml(registration.network_port || textUnknown) + '</div>';
 					html += '<div class="rw-map-detail">Device: ' + escapeHtml(registration.device_name || '-') + '</div>';
 					html += '<div class="rw-map-detail">Version: ' + escapeHtml(registration.firmware_version || '-') + '</div>';
-					html += '<div class="rw-map-detail">Contact: ' + escapeHtml(registration.contact_uri || '-') + '</div>';
+					html += '<div class="rw-map-detail">Contact: ' + escapeHtml(displayContactUri(registration.contact_uri)) + '</div>';
 					html += '<div class="rw-map-detail">Contact expires: ' + escapeHtml(contactExpiryText(registration.contact_expires_at)) + '</div>';
 					html += '<div class="rw-map-detail">Qualify: ' + escapeHtml(registration.qualify_frequency ? registration.qualify_frequency + ' seconds' : '-') + '</div>';
 					html += '<div class="rw-map-detail">' + escapeHtml(textLatency) + ': ' + latencyText(registration, status) + '</div>';

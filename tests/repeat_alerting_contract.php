@@ -17,6 +17,27 @@ function registration_key(string $extension, string $sourceIp, string $uaClass =
 	return hash('sha256', $basis);
 }
 
+function no_contact_registration_key(string $extension): string {
+	return hash('sha256', strtolower(trim($extension)) . "\0no-contact");
+}
+
+function clean_contact_uri(string $value): string {
+	$value = trim($value);
+	if ($value === '') {
+		return '-';
+	}
+	$value = trim($value, '<>');
+	if (stripos($value, 'sip:') === 0) {
+		$value = substr($value, 4);
+	} elseif (stripos($value, 'sips:') === 0) {
+		$value = substr($value, 5);
+	}
+	$value = preg_split('/[;?&#>\s]/', $value, 2)[0] ?? '';
+	$value = trim($value);
+
+	return $value !== '' ? $value : '-';
+}
+
 function resolve_identity_group(array $items, array $existingState = []): array {
 	$usable = [];
 	foreach ($items as $item) {
@@ -163,6 +184,23 @@ function is_still_alertable(string $alertType, string $status): bool {
 		|| ($alertType === 'not_registered' && $status === 'Not registered');
 }
 
+function transition_alert_type(string $from, string $to): ?string {
+	if ($from === '' || $from === 'Unknown') {
+		return null;
+	}
+	if ($to === 'Unreachable' && in_array($from, ['Reachable', 'Registered (no qualify)', 'Unreachable'], true)) {
+		return 'unreachable';
+	}
+	if ($to === 'Not registered' && in_array($from, ['Reachable', 'Registered (no qualify)', 'Unreachable'], true)) {
+		return 'not_registered';
+	}
+	if (in_array($from, ['Unreachable', 'Not registered'], true) && in_array($to, ['Reachable', 'Registered (no qualify)'], true)) {
+		return 'recovery';
+	}
+
+	return null;
+}
+
 function handoff_escalation(PDO $db, int $registrationId, string $registrationKey, string $extension, int $historyId, string $alertType, string $createdAt, string $now): void {
 	$stmt = $db->prepare(
 		'SELECT registration_id, registration_key, extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode
@@ -259,7 +297,8 @@ $db->exec(
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		registration_key TEXT NOT NULL UNIQUE,
 		extension TEXT NOT NULL,
-		source_ip TEXT NOT NULL,
+		contact_uri TEXT,
+		source_ip TEXT,
 		registration_ua_class TEXT NOT NULL DEFAULT "",
 		enabled INTEGER NOT NULL,
 		auto_disabled_absent_at TEXT,
@@ -310,6 +349,16 @@ assert_true(is_still_alertable('not_registered', 'Not registered') === true, 'mi
 $live = [$keyA => 'Reachable'];
 $statusForMissingB = isset($live[$keyB]) ? $live[$keyB] : 'Not registered';
 assert_true($statusForMissingB === 'Not registered', 'reachable sibling must not recover missing registration');
+
+$oneOfTwoLive = [
+	$keyA => 'Reachable',
+];
+$oneOfTwoStatuses = [
+	$keyA => $oneOfTwoLive[$keyA] ?? 'Not registered',
+	$keyB => $oneOfTwoLive[$keyB] ?? 'Not registered',
+];
+assert_true($oneOfTwoStatuses[$keyA] === 'Reachable', 'one-of-two live contact should remain reachable');
+assert_true($oneOfTwoStatuses[$keyB] === 'Not registered', 'one-of-two missing contact should become not registered independently');
 
 $db->prepare('DELETE FROM registrationwatch_alert_escalation WHERE registration_id = ? AND alert_type = ?')->execute([$regB, 'unreachable']);
 assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE registration_id = {$regB}")->fetchColumn() === 0, 'recovery should clear only same registration escalation');
@@ -422,6 +471,95 @@ if (!isset($allowedDeviceIds[strtolower(trim('magrathea-in-1'))])) {
 }
 assert_true((int)$db->query("SELECT enabled FROM registrationwatch_registrations WHERE id = {$trunkReg}")->fetchColumn() === 0, 'stored non-device registration should be disabled by allowlist reconciliation');
 assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE registration_id = {$trunkReg}")->fetchColumn() === 0, 'stored non-device registration should have escalation cleared');
+
+$safeKey = registration_key('2010', '198.51.100.130');
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$safeKey, '2010', '198.51.100.130', 1, null, 'Reachable']);
+$safeReg = (int)$db->lastInsertId();
+$emptyAllowlist = [];
+$storedRegistrationCount = (int)$db->query('SELECT COUNT(*) FROM registrationwatch_registrations')->fetchColumn();
+$deferForEmptyAllowlist = !$emptyAllowlist && $storedRegistrationCount > 0;
+if (!$deferForEmptyAllowlist) {
+	$db->prepare('UPDATE registrationwatch_registrations SET enabled = 0 WHERE id = ?')->execute([$safeReg]);
+}
+assert_true($deferForEmptyAllowlist, 'empty allowlist with stored registrations should defer reconciliation');
+assert_true((int)$db->query("SELECT enabled FROM registrationwatch_registrations WHERE id = {$safeReg}")->fetchColumn() === 1, 'empty allowlist fail-safe should leave stored registrations enabled and untouched');
+
+$placeholderKey = no_contact_registration_key('2006');
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$placeholderKey, '2006', null, 1, 'hourly', 'Unknown']);
+$placeholderId = (int)$db->lastInsertId();
+$db->prepare('UPDATE registrationwatch_registrations SET last_known_status = ? WHERE id = ?')->execute(['Not registered', $placeholderId]);
+assert_true((int)$db->query("SELECT enabled FROM registrationwatch_registrations WHERE id = {$placeholderId}")->fetchColumn() === 1, 'allowlisted no-contact placeholder should be selected and alertable');
+
+$contactKey = registration_key('2006', '198.51.100.88');
+$db->prepare('UPDATE registrationwatch_registrations SET registration_key = ?, source_ip = ?, last_known_status = ? WHERE id = ?')
+	->execute([$contactKey, '198.51.100.88', 'Reachable', $placeholderId]);
+$promoted = $db->query("SELECT id, registration_key, source_ip FROM registrationwatch_registrations WHERE extension = '2006'")->fetch(PDO::FETCH_ASSOC);
+assert_true((int)$promoted['id'] === $placeholderId, 'no-contact to contact should promote the same watched registration row');
+assert_true($promoted['registration_key'] === $contactKey, 'promoted row should adopt contact-backed identity key');
+
+$db->prepare('UPDATE registrationwatch_registrations SET last_known_status = ?, contact_uri = NULL WHERE id = ?')->execute(['Not registered', $placeholderId]);
+$lostContact = $db->query("SELECT id, source_ip, last_known_status FROM registrationwatch_registrations WHERE id = {$placeholderId}")->fetch(PDO::FETCH_ASSOC);
+assert_true((int)$lostContact['id'] === $placeholderId && $lostContact['source_ip'] === '198.51.100.88', 'contact to no-contact should keep the same row and historical source IP');
+assert_true($lostContact['last_known_status'] === 'Not registered', 'lost contact should become not registered on the same watched registration');
+$db->exec(
+	'CREATE TABLE registrationwatch_status_contract_history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		registration_id INTEGER NOT NULL,
+		from_state TEXT,
+		to_state TEXT NOT NULL,
+		source TEXT NOT NULL
+	)'
+);
+$db->prepare('INSERT INTO registrationwatch_status_contract_history (registration_id, from_state, to_state, source) VALUES (?, ?, ?, ?)')
+	->execute([$placeholderId, 'Reachable', 'Not registered', 'reconcile']);
+$demotion = $db->query("SELECT from_state, to_state FROM registrationwatch_status_contract_history WHERE registration_id = {$placeholderId}")->fetch(PDO::FETCH_ASSOC);
+assert_true($demotion['from_state'] === 'Reachable' && $demotion['to_state'] === 'Not registered', 'contact-backed demotion should write Reachable to Not registered status history');
+assert_true(transition_alert_type($demotion['from_state'], $demotion['to_state']) === 'not_registered', 'Reachable to Not registered should enter the not_registered alert path');
+assert_true(transition_alert_type('Unknown', 'Not registered') === null, 'Unknown to Not registered first baseline should remain suppressed');
+
+$multiA = registration_key('2007', '198.51.100.91');
+$multiB = registration_key('2007', '198.51.100.92');
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$multiA, '2007', '198.51.100.91', 1, null, 'Reachable']);
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$multiB, '2007', '198.51.100.92', 1, null, 'Reachable']);
+$db->prepare('UPDATE registrationwatch_registrations SET last_known_status = ? WHERE extension = ?')->execute(['Not registered', '2007']);
+assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_registrations WHERE extension = '2007' AND last_known_status = 'Not registered'")->fetchColumn() === 2, 'multi-contact extension losing all contacts should keep separate known registration rows');
+
+$oldIpKey = registration_key('2008', '198.51.100.101');
+$newIpKey = registration_key('2008', '198.51.100.201');
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$oldIpKey, '2008', '198.51.100.101', 1, null, 'Not registered']);
+$singleDeadId = (int)$db->lastInsertId();
+$deadIds = $db->query("SELECT id FROM registrationwatch_registrations WHERE extension = '2008' AND last_known_status = 'Not registered' ORDER BY id ASC LIMIT 2")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (count($deadIds) === 1) {
+	$db->prepare('UPDATE registrationwatch_registrations SET registration_key = ?, source_ip = ?, last_known_status = ? WHERE id = ?')
+		->execute([$newIpKey, '198.51.100.201', 'Reachable', $deadIds[0]]);
+}
+$singleDeadReturn = $db->query("SELECT id, registration_key, source_ip FROM registrationwatch_registrations WHERE extension = '2008'")->fetch(PDO::FETCH_ASSOC);
+assert_true((int)$singleDeadReturn['id'] === $singleDeadId, 'different-IP return with one dead row should reuse that row');
+assert_true($singleDeadReturn['registration_key'] === $newIpKey && $singleDeadReturn['source_ip'] === '198.51.100.201', 'single dead row should promote to the new source IP identity');
+
+$deadKeyA = registration_key('2009', '198.51.100.111');
+$deadKeyB = registration_key('2009', '198.51.100.112');
+$newDeadKey = registration_key('2009', '198.51.100.211');
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$deadKeyA, '2009', '198.51.100.111', 1, null, 'Not registered']);
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$deadKeyB, '2009', '198.51.100.112', 1, null, 'Not registered']);
+$multiDeadIds = $db->query("SELECT id FROM registrationwatch_registrations WHERE extension = '2009' AND last_known_status = 'Not registered' ORDER BY id ASC LIMIT 2")->fetchAll(PDO::FETCH_COLUMN, 0);
+if (count($multiDeadIds) !== 1) {
+	$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+		->execute([$newDeadKey, '2009', '198.51.100.211', 0, null, 'Unknown']);
+}
+assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_registrations WHERE extension = '2009'")->fetchColumn() === 3, 'different-IP return with multiple dead rows should insert a new row rather than guess');
+assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_registrations WHERE extension = '2009' AND last_known_status = 'Not registered'")->fetchColumn() === 2, 'multiple dead rows should remain unmodified when a new unmatched IP appears');
+
+assert_true(clean_contact_uri('sip:2006@198.51.100.88:5060;ob;x-ast-orig-host=10.0.0.8:5060') === '2006@198.51.100.88:5060', 'map contact display should strip SIP URI parameters');
+$tileTitle = '<div class="rw-map-title"><span class="rw-led rw-led-red"></span><span>' . htmlspecialchars('2006', ENT_QUOTES, 'UTF-8') . '</span></div>';
+assert_true(strpos($tileTitle, '<span>2006</span>') !== false && strpos($tileTitle, '198.51.100.88') === false, 'map tile title should lead with extension, not source IP');
 
 $storm = storm_contract_decision([
 	['registration_id' => $regA, 'extension' => '2001', 'recipient' => 'admin@example.invalid'],

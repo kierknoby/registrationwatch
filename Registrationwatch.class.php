@@ -748,14 +748,17 @@ class Registrationwatch implements \BMO {
 		}
 		return $interval;
 	}
-	private function syncDiscoveredRegistrations(?array $liveContacts = null): void {
+	private function syncDiscoveredRegistrations(?array $liveContacts = null, ?array $allowedDevices = null): void {
 		$now = $this->now();
-		$liveContacts = $liveContacts === null ? $this->getLiveContacts() : $liveContacts;
+		$allowedDevices = $allowedDevices === null ? $this->getAllowedPjsipDeviceIds() : $allowedDevices;
+		$liveContacts = $liveContacts === null ? $this->getLiveContacts($allowedDevices) : $liveContacts;
 		$descriptions = $this->getRegistrationDescriptions();
+		$liveExtensions = [];
 		$db = $this->db();
 
 		foreach ($liveContacts as $registration) {
 			$extension = (string)$registration['extension'];
+			$liveExtensions[$this->normaliseRegistrationExtension($extension)] = true;
 			$stmt = $db->prepare('SELECT id FROM registrationwatch_registrations WHERE registration_key = :registration_key');
 			$stmt->execute([':registration_key' => $registration['registration_key']]);
 			$id = $stmt->fetchColumn();
@@ -802,6 +805,96 @@ class Registrationwatch implements \BMO {
 				continue;
 			}
 
+			$placeholderId = $this->placeholderRegistrationId($extension);
+			if ($placeholderId > 0) {
+				$update = $db->prepare(
+					'UPDATE registrationwatch_registrations
+					SET registration_key = :registration_key,
+						description = :description,
+						discovered = 1,
+						enabled = CASE WHEN auto_disabled_absent_at IS NOT NULL THEN 1 ELSE enabled END,
+						auto_disabled_absent_at = NULL,
+						contact_uri = :contact_uri,
+						source_ip = :source_ip,
+						source_port = :source_port,
+						registration_ua_class = :registration_ua_class,
+						transport = :transport,
+						user_agent = :user_agent,
+						device_name = :device_name,
+						firmware_version = :firmware_version,
+						contact_count = :contact_count,
+						contact_expires_at = :contact_expires_at,
+						qualify_frequency = :qualify_frequency,
+						last_discovered_at = :last_discovered_at,
+						updated_at = :updated_at
+					WHERE id = :id'
+				);
+				$update->execute([
+					':registration_key' => $registration['registration_key'],
+					':description' => $descriptions[$extension] ?? '',
+					':contact_uri' => $registration['contact_uri'] ?? null,
+					':source_ip' => $registration['source_ip'] ?? null,
+					':source_port' => $registration['source_port'] ?? null,
+					':registration_ua_class' => $registration['registration_ua_class'] ?? '',
+					':transport' => $registration['transport'] ?? null,
+					':user_agent' => $registration['user_agent'] ?? null,
+					':device_name' => $registration['device_name'] ?? null,
+					':firmware_version' => $registration['firmware_version'] ?? null,
+					':contact_count' => max(1, (int)($registration['contact_count'] ?? 1)),
+					':contact_expires_at' => $registration['contact_expires_at'] ?? null,
+					':qualify_frequency' => $registration['qualify_frequency'] ?? null,
+					':last_discovered_at' => $now,
+					':updated_at' => $now,
+					':id' => $placeholderId,
+				]);
+				continue;
+			}
+
+			$deadRegistrationId = $this->singleDeadRegistrationId($extension);
+			if ($deadRegistrationId > 0) {
+				$update = $db->prepare(
+					'UPDATE registrationwatch_registrations
+					SET registration_key = :registration_key,
+						description = :description,
+						discovered = 1,
+						enabled = CASE WHEN auto_disabled_absent_at IS NOT NULL THEN 1 ELSE enabled END,
+						auto_disabled_absent_at = NULL,
+						contact_uri = :contact_uri,
+						source_ip = :source_ip,
+						source_port = :source_port,
+						registration_ua_class = :registration_ua_class,
+						transport = :transport,
+						user_agent = :user_agent,
+						device_name = :device_name,
+						firmware_version = :firmware_version,
+						contact_count = :contact_count,
+						contact_expires_at = :contact_expires_at,
+						qualify_frequency = :qualify_frequency,
+						last_discovered_at = :last_discovered_at,
+						updated_at = :updated_at
+					WHERE id = :id'
+				);
+				$update->execute([
+					':registration_key' => $registration['registration_key'],
+					':description' => $descriptions[$extension] ?? '',
+					':contact_uri' => $registration['contact_uri'] ?? null,
+					':source_ip' => $registration['source_ip'] ?? null,
+					':source_port' => $registration['source_port'] ?? null,
+					':registration_ua_class' => $registration['registration_ua_class'] ?? '',
+					':transport' => $registration['transport'] ?? null,
+					':user_agent' => $registration['user_agent'] ?? null,
+					':device_name' => $registration['device_name'] ?? null,
+					':firmware_version' => $registration['firmware_version'] ?? null,
+					':contact_count' => max(1, (int)($registration['contact_count'] ?? 1)),
+					':contact_expires_at' => $registration['contact_expires_at'] ?? null,
+					':qualify_frequency' => $registration['qualify_frequency'] ?? null,
+					':last_discovered_at' => $now,
+					':updated_at' => $now,
+					':id' => $deadRegistrationId,
+				]);
+				continue;
+			}
+
 			$insert = $db->prepare(
 				'INSERT INTO registrationwatch_registrations
 					(registration_key, extension, description, enabled, discovered, last_known_status, contact_uri,
@@ -834,6 +927,94 @@ class Registrationwatch implements \BMO {
 				':last_discovered_at' => $now,
 			]);
 		}
+
+		$this->seedMissingDeviceRegistrations($allowedDevices, $liveExtensions, $descriptions, $now);
+	}
+
+	private function seedMissingDeviceRegistrations(array $allowedDevices, array $liveExtensions, array $descriptions, string $now): void {
+		$knownCounts = $this->storedRegistrationCountsByExtension();
+		foreach (array_keys($allowedDevices) as $extension) {
+			if (isset($liveExtensions[$extension]) || ($knownCounts[$extension] ?? 0) > 0) {
+				continue;
+			}
+
+			$stmt = $this->db()->prepare(
+				'INSERT IGNORE INTO registrationwatch_registrations
+					(registration_key, extension, description, enabled, discovered, last_known_status,
+					 contact_count, created_at, updated_at, first_discovered_at, last_discovered_at)
+				VALUES
+					(:registration_key, :extension, :description, 1, 1, :last_known_status,
+					 1, :created_at, :updated_at, :first_discovered_at, :last_discovered_at)'
+			);
+			$stmt->execute([
+				':registration_key' => $this->noContactRegistrationKey($extension),
+				':extension' => $extension,
+				':description' => $descriptions[$extension] ?? '',
+				':last_known_status' => self::STATUS_UNKNOWN,
+				':created_at' => $now,
+				':updated_at' => $now,
+				':first_discovered_at' => $now,
+				':last_discovered_at' => $now,
+			]);
+		}
+	}
+
+	private function storedRegistrationCountsByExtension(): array {
+		$stmt = $this->db()->query('SELECT extension, COUNT(*) AS total FROM registrationwatch_registrations GROUP BY extension');
+		$counts = [];
+		foreach ($stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [] as $row) {
+			$extension = $this->normaliseRegistrationExtension((string)($row['extension'] ?? ''));
+			if ($extension !== '') {
+				$counts[$extension] = (int)($row['total'] ?? 0);
+			}
+		}
+
+		return $counts;
+	}
+
+	private function hasStoredRegistrations(): bool {
+		if (!$this->tableExists('registrationwatch_registrations')) {
+			return false;
+		}
+
+		$stmt = $this->db()->query('SELECT COUNT(*) FROM registrationwatch_registrations');
+		return $stmt ? (int)$stmt->fetchColumn() > 0 : false;
+	}
+
+	private function shouldDeferForEmptyAllowlist(array $allowedDevices): bool {
+		return !$allowedDevices && $this->hasStoredRegistrations();
+	}
+
+	private function placeholderRegistrationId(string $extension): int {
+		$stmt = $this->db()->prepare(
+			'SELECT id
+			FROM registrationwatch_registrations
+			WHERE registration_key = :registration_key
+				AND (source_ip IS NULL OR source_ip = "")
+			LIMIT 1'
+		);
+		$stmt->execute([':registration_key' => $this->noContactRegistrationKey($extension)]);
+		$id = $stmt->fetchColumn();
+
+		return $id ? (int)$id : 0;
+	}
+
+	private function singleDeadRegistrationId(string $extension): int {
+		$stmt = $this->db()->prepare(
+			'SELECT id
+			FROM registrationwatch_registrations
+			WHERE extension = :extension
+				AND last_known_status = :status
+			ORDER BY id ASC
+			LIMIT 2'
+		);
+		$stmt->execute([
+			':extension' => $this->normaliseRegistrationExtension($extension),
+			':status' => self::STATUS_NOT_REGISTERED,
+		]);
+		$ids = $stmt->fetchAll(\PDO::FETCH_COLUMN, 0);
+
+		return count($ids) === 1 ? (int)$ids[0] : 0;
 	}
 
 	private function getPjsipRegistrationTargets(): array {
@@ -912,14 +1093,19 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function reconcileCurrentStatusLocked(): void {
-		$contacts = $this->getLiveContacts();
-		$this->syncDiscoveredRegistrations($contacts);
+		$allowedDevices = $this->getAllowedPjsipDeviceIds();
+		if ($this->shouldDeferForEmptyAllowlist($allowedDevices)) {
+			$this->logWarning('Registration Watch PJSIP device allowlist is empty while watched registrations exist; reconciliation deferred to avoid disabling configured devices.');
+			return;
+		}
+
+		$contacts = $this->getLiveContacts($allowedDevices);
+		$this->syncDiscoveredRegistrations($contacts, $allowedDevices);
 		$now = $this->now();
 		$db = $this->db();
 		$registrations = $this->getStoredRegistrations();
 		$settings = $this->getAlertSettings();
 		$autoDisableAbsentSeconds = $this->autoDisableAbsentSeconds($settings);
-		$allowedDevices = $this->getAllowedPjsipDeviceIds();
 
 		foreach ($registrations as $registration) {
 			if ((int)$registration['discovered'] === 0) {
@@ -1115,7 +1301,7 @@ class Registrationwatch implements \BMO {
 		return ($nowTs - $lastSeenTs) >= $thresholdSeconds;
 	}
 
-	private function getLiveContacts(): array {
+	private function getLiveContacts(?array $allowedDevices = null): array {
 		$output = $this->runAsteriskCommand('pjsip show contacts');
 		if (trim($output) === '') {
 			throw new \Exception(_('Registration Watch could not query Asterisk. Confirm the FreePBX AMI user has Command privilege.'));
@@ -1123,7 +1309,10 @@ class Registrationwatch implements \BMO {
 
 		$contacts = [];
 		$pending = [];
-		$allowedDevices = $this->getAllowedPjsipDeviceIds();
+		$allowedDevices = $allowedDevices === null ? $this->getAllowedPjsipDeviceIds() : $allowedDevices;
+		if ($this->shouldDeferForEmptyAllowlist($allowedDevices)) {
+			throw new \Exception(_('Registration Watch PJSIP device allowlist is unavailable; deferring status reconciliation.'));
+		}
 		$registrarDetails = $this->getRegistrarContactDetails();
 		$existingIdentityClasses = $this->getStoredRegistrationIdentityClasses();
 		$lineCount = 0;
@@ -1448,6 +1637,10 @@ class Registrationwatch implements \BMO {
 		}
 
 		return hash('sha256', $basis);
+	}
+
+	private function noContactRegistrationKey(string $extension): string {
+		return hash('sha256', $this->normaliseRegistrationExtension($extension) . "\0no-contact");
 	}
 
 	private function registrationIdentityGroupKey(string $extension, string $sourceIp): string {
