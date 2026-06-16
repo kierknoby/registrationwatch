@@ -394,7 +394,7 @@ $_rwAssetVer = max(
 							<div class="form-group rw-storm-threshold-group">
 								<label for="rw-storm-threshold"><?php echo _('Storm Threshold'); ?></label>
 								<input type="number" id="rw-storm-threshold" class="form-control" min="0" max="10000" step="1" value="<?php echo htmlspecialchars($alertSettings['storm_threshold'] ?? '20', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. The count is per registration, not per extension, so an extension with several devices can contribute several alerts. Use 0 to disable.'); ?></p>
+								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. The count is per registration. Use 0 to disable.'); ?></p>
 							</div>
 						</div>
 						<div class="col-sm-6">
