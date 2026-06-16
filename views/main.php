@@ -383,27 +383,14 @@ $_rwAssetVer = max(
 									<?php echo _('Alert when a watched registration recovers'); ?>
 								</label>
 							</div>
-							<div class="rw-actions">
-								<button type="button" id="rw-save-alerts" class="btn btn-primary">
-									<i class="fa fa-save"></i> <?php echo _('Save'); ?>
-								</button>
-								<button type="button" id="rw-test-email" class="btn btn-default" disabled>
-									<i class="fa fa-envelope"></i> <?php echo _('Test Email'); ?>
-								</button>
-							</div>
-							<div class="form-group rw-storm-threshold-group">
-								<label for="rw-storm-threshold"><?php echo _('Storm Threshold'); ?></label>
-								<input type="number" id="rw-storm-threshold" class="form-control" min="0" max="10000" step="1" value="<?php echo htmlspecialchars($alertSettings['storm_threshold'] ?? '20', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. The count is per registration. Use 0 to disable.'); ?></p>
-							</div>
-						</div>
-						<div class="col-sm-6">
-							<h4><?php echo _('Alert tuning'); ?></h4>
 							<div class="form-group">
 								<label for="rw-debounce-seconds"><?php echo _('Debounce delay (seconds)'); ?></label>
 								<input type="number" id="rw-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
 								<p class="help-block"><?php echo _('How long a problem must remain active before the first alert is sent. The default 0 seconds alerts immediately. Increase this value to reduce noise from short reloads, restarts, and transient network events. Maximum 86400 seconds, 24 hours.'); ?></p>
 							</div>
+						</div>
+						<div class="col-sm-6">
+							<h4><?php echo _('Alert tuning'); ?></h4>
 							<div class="form-group">
 								<label for="rw-repeat-mode"><?php echo _('Repeat alerts'); ?></label>
 								<select id="rw-repeat-mode" class="form-control">
@@ -422,6 +409,23 @@ $_rwAssetVer = max(
 								</p>
 							</div>
 							<p class="help-block"><?php echo _('Per-extension repeat overrides can be set in the Watched Extensions table.'); ?></p>
+							<div class="form-group rw-storm-threshold-group">
+								<label for="rw-storm-threshold"><?php echo _('Storm Threshold'); ?></label>
+								<input type="number" id="rw-storm-threshold" class="form-control" min="0" max="10000" step="1" value="<?php echo htmlspecialchars($alertSettings['storm_threshold'] ?? '20', ENT_QUOTES, 'UTF-8'); ?>">
+								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. The count is per registration. Use 0 to disable.'); ?></p>
+							</div>
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-sm-12 text-right">
+							<div class="rw-actions">
+								<button type="button" id="rw-save-alerts" class="btn btn-primary">
+									<i class="fa fa-save"></i> <?php echo _('Save'); ?>
+								</button>
+								<button type="button" id="rw-test-email" class="btn btn-default" disabled>
+									<i class="fa fa-envelope"></i> <?php echo _('Test Email'); ?>
+								</button>
+							</div>
 						</div>
 					</div>
 				</div>
