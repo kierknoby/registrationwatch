@@ -196,12 +196,32 @@
 	$(function () {
 		var root = $('.registrationwatch');
 		var refreshButton = $('#rw-refresh');
+		var alertSettingsDirty = false;
+		var alertSettingsSavedThisSession = false;
 		var refreshInFlight = false;
 		var refreshTimer = null;
 
 		function getPollInterval() {
 			return parseInt(root.attr('data-poll-interval'), 10) || 0;
 		}
+
+		function hasAlertRecipients() {
+			return $.trim(String($('#rw-alert-recipients').val() || '')) !== '';
+		}
+
+		function updateTestEmailState() {
+			$('#rw-test-email').prop('disabled', alertSettingsDirty || !alertSettingsSavedThisSession || !hasAlertRecipients());
+		}
+
+		function markAlertSettingsDirty() {
+			alertSettingsDirty = true;
+			updateTestEmailState();
+		}
+
+		updateTestEmailState();
+
+		$('#rw-alert-enabled, #rw-alert-recipients, #rw-alert-on-unreachable, #rw-alert-on-not-registered, #rw-alert-on-recovery, #rw-debounce-seconds, #rw-repeat-mode, #rw-storm-threshold')
+			.on('input change', markAlertSettingsDirty);
 
 		$('.rw-enabled').each(function () {
 			setToggleText($(this));
@@ -411,6 +431,9 @@
 					return;
 				}
 				startAutoRefresh();
+				alertSettingsDirty = false;
+				alertSettingsSavedThisSession = true;
+				updateTestEmailState();
 				showMessage(response.message || 'Alert settings saved.', 'success');
 			}).fail(function () {
 				showMessage('Unable to save alert settings.', 'error');
@@ -422,6 +445,10 @@
 		$('#rw-test-email').off('click.registrationwatch').on('click.registrationwatch', function () {
 			var button = $(this);
 			var token = registrationWatchToken(root);
+			if (button.prop('disabled') || alertSettingsDirty || !alertSettingsSavedThisSession || !hasAlertRecipients()) {
+				updateTestEmailState();
+				return;
+			}
 			if (!token) {
 				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
 				return;
@@ -445,7 +472,7 @@
 			}).fail(function () {
 				showMessage('Unable to send test email.', 'error');
 			}).always(function () {
-				button.prop('disabled', false);
+				updateTestEmailState();
 			});
 		});
 

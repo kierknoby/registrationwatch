@@ -56,6 +56,9 @@ $timeDiagnostics = isset($timeDiagnostics) && is_array($timeDiagnostics) ? $time
 	'database_time' => '',
 ];
 $pollIntervalSeconds = isset($pollIntervalSeconds) ? (int)$pollIntervalSeconds : 10;
+$registrationEmptyText = $pollIntervalSeconds > 0
+	? sprintf(_('No registered extensions discovered yet. Registration Watch checks automatically every %d seconds; extensions will appear here once discovered.'), $pollIntervalSeconds)
+	: _('No registered extensions discovered yet. Registration Watch will show extensions here once automatic checks run.');
 $csrfToken = isset($csrfToken) ? (string)$csrfToken : '';
 $repeatModeOptions = [
 	'never' => _('Never'),
@@ -200,7 +203,7 @@ $_rwAssetVer = max(
 						</div>
 					<div id="rw-topology-container" style="min-height: 200px;">
 						<?php if (empty($mapRegistrations)): ?>
-							<p class="text-muted"><?php echo _('No registered extensions discovered yet. Use Manual Refresh to discover registrations.'); ?></p>
+							<p class="text-muted"><?php echo htmlspecialchars($registrationEmptyText, ENT_QUOTES, 'UTF-8'); ?></p>
 						<?php else: ?>
 							<div class="rw-registration-map">
 								<?php foreach ($mapVisibleRegistrations as $registration): ?>
@@ -247,7 +250,7 @@ $_rwAssetVer = max(
 				</div>
 				<div class="panel-body">
 					<?php if (empty($registrations)): ?>
-						<p class="rw-placeholder"><?php echo _('No PJSIP extensions are stored yet. Use Manual Refresh to discover registrations.'); ?></p>
+						<p class="rw-placeholder"><?php echo htmlspecialchars($registrationEmptyText, ENT_QUOTES, 'UTF-8'); ?></p>
 					<?php else: ?>
 						<div class="table-responsive rw-registrations-wrap">
 							<table class="table table-striped table-condensed rw-registrations rw-watched-registrations-table">
@@ -352,6 +355,30 @@ $_rwAssetVer = max(
 									<?php echo _('Alert when an extension recovers'); ?>
 								</label>
 							</div>
+							<div class="rw-actions">
+								<button type="button" id="rw-save-alerts" class="btn btn-primary">
+									<i class="fa fa-save"></i> <?php echo _('Save'); ?>
+								</button>
+								<button type="button" id="rw-test-email" class="btn btn-default" disabled>
+									<i class="fa fa-envelope"></i> <?php echo _('Test Email'); ?>
+								</button>
+							</div>
+							<div class="form-group">
+								<label for="rw-storm-threshold"><?php echo _('Storm Threshold'); ?></label>
+								<input type="number" id="rw-storm-threshold" class="form-control" min="0" max="10000" step="1" value="<?php echo htmlspecialchars($alertSettings['storm_threshold'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
+								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. Use 0 to disable.'); ?></p>
+							</div>
+							<div class="rw-diagnostics">
+								<hr>
+								<h5><?php echo _('Diagnostics'); ?></h5>
+								<p class="help-block">
+									<?php echo _('Module time'); ?>:
+									<span id="rw-module-time"><?php echo htmlspecialchars((string)($timeDiagnostics['module_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
+									|
+									<?php echo _('Database time'); ?>:
+									<span id="rw-database-time"><?php echo htmlspecialchars((string)($timeDiagnostics['database_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
+								</p>
+							</div>
 						</div>
 						<div class="col-sm-6">
 							<h4><?php echo _('Alert tuning'); ?></h4>
@@ -379,34 +406,6 @@ $_rwAssetVer = max(
 								</p>
 							</div>
 							<p class="help-block"><?php echo _('Per-extension repeat overrides can be set in the Watched extensions table.'); ?></p>
-							<div class="form-group">
-								<label for="rw-storm-threshold"><?php echo _('Storm Threshold'); ?></label>
-								<input type="number" id="rw-storm-threshold" class="form-control" min="0" max="10000" step="1" value="<?php echo htmlspecialchars($alertSettings['storm_threshold'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. Use 0 to disable.'); ?></p>
-							</div>
-							<div class="rw-diagnostics">
-								<hr>
-								<h5><?php echo _('Diagnostics'); ?></h5>
-								<p class="help-block">
-									<?php echo _('Module time'); ?>:
-									<span id="rw-module-time"><?php echo htmlspecialchars((string)($timeDiagnostics['module_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
-									|
-									<?php echo _('Database time'); ?>:
-									<span id="rw-database-time"><?php echo htmlspecialchars((string)($timeDiagnostics['database_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
-								</p>
-							</div>
-						</div>
-					</div>
-					<div class="row">
-						<div class="col-sm-12">
-							<div class="rw-actions">
-								<button type="button" id="rw-save-alerts" class="btn btn-primary">
-									<i class="fa fa-save"></i> <?php echo _('Save'); ?>
-								</button>
-								<button type="button" id="rw-test-email" class="btn btn-default">
-									<i class="fa fa-envelope"></i> <?php echo _('Test Email'); ?>
-								</button>
-							</div>
 						</div>
 					</div>
 				</div>
@@ -561,7 +560,7 @@ $_rwAssetVer = max(
 <script>
 	// Registration map renderer. Auto-refresh uses the read-only topology AJAX path in registrationwatch.js.
 	(function() {
-		const textNoRegistrations = <?php echo json_encode(_('No registered extensions discovered yet. Use Manual Refresh to discover registrations.')); ?>;
+		const textNoRegistrations = <?php echo json_encode($registrationEmptyText); ?>;
 		const textDeviceIp = <?php echo json_encode(_('Device IP')); ?>;
 		const textDevicePort = <?php echo json_encode(_('Device Port')); ?>;
 		const textNetworkIp = <?php echo json_encode(_('Network IP')); ?>;
