@@ -184,6 +184,15 @@
 		};
 	}
 
+	function updateTimeDiagnostics(timeDiagnostics) {
+		if (!timeDiagnostics) {
+			return;
+		}
+
+		$('#rw-module-time').text(timeDiagnostics.module_time || '');
+		$('#rw-database-time').text(timeDiagnostics.database_time || '');
+	}
+
 	$(function () {
 		var root = $('.registrationwatch');
 		var refreshButton = $('#rw-refresh');
@@ -338,6 +347,7 @@
 				if (response.alertHistory) {
 					renderAlertHistoryRows(response.alertHistory);
 				}
+				updateTimeDiagnostics(response.timeDiagnostics);
 				if (!isAutomatic) {
 					showMessage(response.message || 'Registration status refreshed.', 'success');
 				}

@@ -251,6 +251,13 @@ $_rwAssetVer = max(
 					<?php else: ?>
 						<div class="table-responsive rw-registrations-wrap">
 							<table class="table table-striped table-condensed rw-registrations rw-watched-registrations-table">
+								<colgroup>
+									<col class="rw-col-selection">
+									<col class="rw-col-extension">
+									<col class="rw-col-description">
+									<col class="rw-col-repeat">
+									<col class="rw-col-notes">
+								</colgroup>
 								<thead>
 									<tr>
 										<th><?php echo _('Selection'); ?></th>
@@ -266,7 +273,6 @@ $_rwAssetVer = max(
 											<td data-label="<?php echo _('Selection'); ?>">
 													<label class="rw-toggle">
 														<input type="checkbox" class="rw-enabled" <?php echo !empty($registration['enabled']) ? 'checked' : ''; ?>>
-														<span><?php echo !empty($registration['enabled']) ? _('Selected') : _('Not selected'); ?></span>
 													</label>
 											</td>
 											<td data-label="<?php echo _('Extension'); ?>"><?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?></td>
@@ -378,13 +384,17 @@ $_rwAssetVer = max(
 								<input type="number" id="rw-storm-threshold" class="form-control" min="0" max="10000" step="1" value="<?php echo htmlspecialchars($alertSettings['storm_threshold'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
 								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. Use 0 to disable.'); ?></p>
 							</div>
-							<p class="help-block">
-								<?php echo _('Module time'); ?>:
-								<?php echo htmlspecialchars((string)($timeDiagnostics['module_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
-								|
-								<?php echo _('Database time'); ?>:
-								<?php echo htmlspecialchars((string)($timeDiagnostics['database_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
-							</p>
+							<div class="rw-diagnostics">
+								<hr>
+								<h5><?php echo _('Diagnostics'); ?></h5>
+								<p class="help-block">
+									<?php echo _('Module time'); ?>:
+									<span id="rw-module-time"><?php echo htmlspecialchars((string)($timeDiagnostics['module_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
+									|
+									<?php echo _('Database time'); ?>:
+									<span id="rw-database-time"><?php echo htmlspecialchars((string)($timeDiagnostics['database_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
+								</p>
+							</div>
 						</div>
 					</div>
 					<div class="row">

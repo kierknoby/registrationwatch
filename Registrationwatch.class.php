@@ -303,6 +303,7 @@ class Registrationwatch implements \BMO {
 				'statusHistory' => $data['statusHistory'],
 				'alertHistory' => $data['alertHistory'],
 				'lastRefresh' => $data['lastRefresh'],
+				'timeDiagnostics' => $data['timeDiagnostics'],
 			];
 		} catch (\Exception $e) {
 			$message = _('Failed to refresh registration status. Please check the system logs.');
@@ -566,6 +567,7 @@ class Registrationwatch implements \BMO {
 				'registrations' => $this->getRegistrationMapRows(),
 				'statusHistory' => $this->getStatusHistory(),
 				'alertHistory' => $this->getAlertHistory(),
+				'timeDiagnostics' => $this->getTimeDiagnostics(),
 				'timestamp' => $this->now(),
 			];
 		} catch (\Exception $e) {
@@ -576,6 +578,7 @@ class Registrationwatch implements \BMO {
 				'registrations' => [],
 				'statusHistory' => [],
 				'alertHistory' => [],
+				'timeDiagnostics' => $this->getTimeDiagnostics(),
 			];
 		}
 	}

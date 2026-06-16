@@ -190,6 +190,11 @@ Granular FreePBX ACL integration is still future work.
 * No webhook or SMS alert delivery yet.
 * Short flaps can be missed between reconciliation runs.
 * Email delivery depends on the PBX mail sender and relay setup.
+* An extension with multiple registered contacts is shown as a single status
+  tile reflecting the best-status contact, not one tile per contact. A device
+  that is down can therefore be masked if the same extension is also registered
+  elsewhere and reachable. Full per-contact display is a candidate for a future
+  release.
 
 ## Validation
 

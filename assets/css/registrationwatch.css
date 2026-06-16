@@ -237,6 +237,26 @@
         width: 100%;
 }
 
+.registrationwatch .rw-watched-registrations-table .rw-col-selection {
+        width: 72px;
+}
+
+.registrationwatch .rw-watched-registrations-table .rw-col-extension {
+        width: 100px;
+}
+
+.registrationwatch .rw-watched-registrations-table .rw-col-description {
+        width: 18%;
+}
+
+.registrationwatch .rw-watched-registrations-table .rw-col-repeat {
+        width: 22%;
+}
+
+.registrationwatch .rw-watched-registrations-table .rw-col-notes {
+        width: auto;
+}
+
 .registrationwatch .rw-watched-registrations-table .rw-registration-notes,
 .registrationwatch .rw-watched-registrations-table .rw-repeat-mode {
         width: 100%;
