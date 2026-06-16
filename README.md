@@ -198,6 +198,11 @@ Granular FreePBX ACL integration is still future work.
 * No webhook or SMS alert delivery yet.
 * Short flaps can be missed between reconciliation runs.
 * Email delivery depends on the PBX mail sender and relay setup.
+* Registration Watch only watches registrations for configured FreePBX PJSIP
+  devices (extensions). PJSIP trunks and other non-device PJSIP objects are not
+  watched. A live contact is matched to a device by its endpoint identity
+  against the FreePBX devices table, so custom or unusual PJSIP objects whose
+  contact target does not match a configured device ID will not appear.
 * Registration Watch identifies watched registrations by extension and source
   IP. Multiple contacts for the same extension from the same source IP are
   treated as one watched registration unless conflicting user-agents are present,
