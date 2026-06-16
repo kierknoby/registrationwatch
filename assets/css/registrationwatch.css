@@ -253,6 +253,16 @@
         width: 100%;
 }
 
+.registrationwatch .rw-watched-registrations-table > tbody > tr > td {
+        padding-top: 9px;
+        padding-bottom: 7px;
+        vertical-align: middle;
+}
+
+.registrationwatch .rw-watched-registrations-table > tbody > tr + tr > td {
+        border-top-width: 2px;
+}
+
 .registrationwatch .rw-watched-registrations-table .rw-col-selection {
         width: 58px;
 }
