@@ -12,9 +12,8 @@ or system.
 
 ## Development Branch Warning
 
-The `1-2-0_dev` branch is in active development and is not safe for production
-systems. Use the `main` branch unless you are explicitly testing development
-changes.
+This branch is in active development. Use the `main` branch for stable releases
+unless you are explicitly testing 1.2.0 development changes.
 
 ## Compatibility
 
@@ -25,7 +24,7 @@ Use with FreePBX/PBXact 17 only. Do not install on FreePBX/PBXact 16 or below.
 * FreePBX/PBXact 17
 * PJSIP channel driver
 * Existing FreePBX PJSIP extensions/devices
-* Asterisk manager command support available to FreePBX
+* Asterisk Manager access available to FreePBX
 * FreePBX Job runner enabled for scheduled background checks
 * FreePBX mail support configured if alert email delivery is required
 
@@ -103,16 +102,17 @@ The canonical Registration Watch table names are:
 * `registrationwatch_status_history`
 * `registrationwatch_settings`
 * `registrationwatch_alert_history`
+* `registrationwatch_alert_escalation`
 
-`registrationwatch_registrations` stores discovered registered extensions, watch toggles,
-admin notes, and the latest status snapshot.
+`registrationwatch_registrations` stores watched FreePBX PJSIP extension entries,
+including discovered contact details, watch toggles, admin notes, and the latest
+status snapshot.
 
 `registrationwatch_status_history` stores transition rows created during
 reconciliation.
 
-`registrationwatch_settings` stores simple key/value settings, including alert
-configuration, UI show limits, trusted VPN networks, polling interval, and
-history pruning policies.
+`registrationwatch_settings` stores simple key/value settings, including polling
+interval, UI show limits, alert configuration, and history pruning policies.
 
 `registrationwatch_alert_history` stores one row per recipient and alert
 decision. The unique key `registrationwatch_alert_unique_transition_recipient`
@@ -120,9 +120,17 @@ prevents repeated handling of the same transition, alert type, and recipient.
 Storm-suppressed rows are also stored here so the audit trail shows which
 individual messages were not sent because a Storm Summary was used.
 
+`registrationwatch_alert_escalation` stores repeat-alert reminder state for
+registrations that remain unavailable, tracking when the next reminder is due
+under the configured repeat mode.
+
 ## Alerting
 
 Alerts are generated from reconciliation-created transition rows.
+
+Discovered extensions are listed in the Watched Extensions table but not
+monitored by default. Enable the Monitored toggle for any extension that should
+generate alerts.
 
 Defaults:
 
@@ -159,7 +167,9 @@ Repeat alert modes:
 
 Stored legacy `fibonacci` repeat-mode values are treated as Escalating.
 
-The default debounce delay is 0 seconds, so first alerts are sent immediately when an alertable problem is detected. Increase this value to reduce noise from short reloads, restarts, and transient network events.
+The default debounce delay is 0 seconds, so first alerts are sent immediately
+when an alertable problem is detected. Increase this value to reduce noise from
+short reloads, restarts, and transient network events.
 
 Storm Threshold limits large batches of alerts generated in the same processing
 pass. It reduces email floods from sudden widespread registration changes, but
@@ -167,9 +177,9 @@ it is not full correlated-outage detection. The count is per registration, not
 per extension, so an extension with several devices can contribute several
 alerts. Use 0 to disable.
 
-Watched registrations that have been continuously absent for 30 days are
+Watched extensions that have been continuously absent for 30 days are
 auto-disabled to stop stale devices from alerting forever. They remain visible
-in the Watched Registrations table and are re-enabled automatically if the same
+in the Watched Extensions table and are re-enabled automatically if the same
 registration returns.
 
 Email sending uses FreePBX/CodeIgniter mail support. Registration Watch does not
@@ -202,11 +212,12 @@ Granular FreePBX ACL integration is still future work.
   watched. A live contact is matched to a device by its endpoint identity
   against the FreePBX devices table, so custom or unusual PJSIP objects whose
   contact target does not match a configured device ID will not appear.
-* Registration Watch identifies watched registrations by extension and source
-  IP. Multiple contacts for the same extension from the same source IP are
-  treated as one watched registration unless conflicting user-agents are present,
-  in which case they are split into separate watched registrations. Contact URI
-  and port are shown as detail and may change as the device re-registers.
+* Registration Watch identifies watched entries from the FreePBX extension
+  identity and registration/contact details exposed by Asterisk. Multiple
+  contacts for the same extension may appear as separate watched entries where
+  Registration Watch can distinguish them. Contact URI, source address, and port
+  details are shown as diagnostic detail and may change as the device
+  re-registers.
 
 ## Validation
 
