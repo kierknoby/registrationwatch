@@ -831,8 +831,8 @@
                 var $status = $input.closest('td').find('.rw-notes-status');
                 var value = $input.val() || '';
 
-                if (value.length > 48) {
-                        value = value.substring(0, 48);
+                if (value.length > 72) {
+                        value = value.substring(0, 72);
                         $input.val(value);
                 }
 
