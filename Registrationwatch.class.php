@@ -46,12 +46,12 @@ class Registrationwatch implements \BMO {
 		'alert_enabled' => '0',
 		'alert_recipients' => '',
 		'repeat_mode' => self::REPEAT_MODE_NEVER,
+		'storm_threshold' => '0',
 		'ui_show_limit' => '6',
 		'alert_on_unreachable' => '1',
 		'alert_on_not_registered' => '1',
 		'alert_on_recovery' => '1',
-		'debounce_seconds' => '0',
-		'repeat_suppression_seconds' => '0',
+		'debounce_seconds' => '300',
 		'trusted_vpn_networks' => '',
 		'topology_poll_interval_seconds' => '10',
 		'status_history_prune_policy' => 'never',
@@ -225,6 +225,7 @@ class Registrationwatch implements \BMO {
 			'lastRefresh' => $data['lastRefresh'],
 			'refreshError' => $data['refreshError'],
 			'emailStatus' => $data['emailStatus'],
+			'timeDiagnostics' => $data['timeDiagnostics'],
 			'pollIntervalSeconds' => $data['pollIntervalSeconds'],
 			'csrfToken' => $this->createCsrfToken(),
 		]);
@@ -453,20 +454,20 @@ class Registrationwatch implements \BMO {
 		if ($debounceSeconds === null) {
 			return ['status' => false, 'message' => _('Debounce delay must be a whole number from 0 to 86400 seconds.')];
 		}
-		$repeatSuppressionSeconds = $this->normaliseAlertTimingSeconds('repeat_suppression_seconds', $this->settingsDefaults['repeat_suppression_seconds']);
-		if ($repeatSuppressionSeconds === null) {
-			return ['status' => false, 'message' => _('Repeat suppression must be a whole number from 0 to 86400 seconds.')];
+		$stormThreshold = $this->normaliseStormThreshold(isset($_REQUEST['storm_threshold']) ? (string)$_REQUEST['storm_threshold'] : $this->settingsDefaults['storm_threshold']);
+		if ($stormThreshold === null) {
+			return ['status' => false, 'message' => _('Storm Threshold must be a whole number from 0 to 10000.')];
 		}
 
 		$settings = [
 			'alert_enabled' => !empty($_REQUEST['alert_enabled']) ? '1' : '0',
 			'alert_recipients' => implode(', ', $recipients),
 			'repeat_mode' => $this->normaliseRepeatMode(isset($_REQUEST['repeat_mode']) ? (string)$_REQUEST['repeat_mode'] : $this->settingsDefaults['repeat_mode']),
+			'storm_threshold' => (string)$stormThreshold,
 			'alert_on_unreachable' => !empty($_REQUEST['alert_on_unreachable']) ? '1' : '0',
 			'alert_on_not_registered' => !empty($_REQUEST['alert_on_not_registered']) ? '1' : '0',
 			'alert_on_recovery' => !empty($_REQUEST['alert_on_recovery']) ? '1' : '0',
 			'debounce_seconds' => (string)$debounceSeconds,
-			'repeat_suppression_seconds' => (string)$repeatSuppressionSeconds,
 		];
 
 		foreach ($settings as $key => $value) {
@@ -692,8 +693,26 @@ class Registrationwatch implements \BMO {
 			'alertHistory' => $this->getAlertHistory(),
 			'lastRefresh' => $this->getLastRefreshTime(),
 			'emailStatus' => $this->getEmailStatus(),
+			'timeDiagnostics' => $this->getTimeDiagnostics(),
 			'pollIntervalSeconds' => $this->getPollInterval(),
 			'refreshError' => $refreshError,
+		];
+	}
+
+	private function getTimeDiagnostics(): array {
+		$moduleTime = $this->now();
+		$databaseTime = '';
+
+		try {
+			$stmt = $this->db()->query('SELECT NOW()');
+			$databaseTime = $stmt ? (string)$stmt->fetchColumn() : '';
+		} catch (\Throwable $e) {
+			$this->logWarning('Database time diagnostic unavailable: ' . $e->getMessage());
+		}
+
+		return [
+			'module_time' => $moduleTime,
+			'database_time' => $databaseTime,
 		];
 	}
 
@@ -979,7 +998,7 @@ class Registrationwatch implements \BMO {
 	private function getLiveContacts(): array {
 		$output = $this->runAsteriskCommand('pjsip show contacts');
 		if (trim($output) === '') {
-			throw new \Exception(_('No response from Asterisk PJSIP contact query.'));
+			throw new \Exception(_('Registration Watch could not query Asterisk. Confirm the FreePBX AMI user has Command privilege.'));
 		}
 
 		$contacts = [];
@@ -1396,6 +1415,8 @@ class Registrationwatch implements \BMO {
 		$settings = $this->getAlertSettings();
 		$recipients = $this->normaliseRecipients($settings['alert_recipients']);
 		$canSend = $settings['alert_enabled'] === '1' && (bool)$recipients;
+		$collectedAlerts = [];
+		$reminderCycles = [];
 
 		try {
 			$debounceSeconds = min(self::ALERT_TIMING_MAX_SECONDS, max(0, (int)$settings['debounce_seconds']));
@@ -1450,11 +1471,6 @@ class Registrationwatch implements \BMO {
 						continue;
 					}
 
-					if ($this->isRepeatSuppressed($transition, $alertType, $recipient, $settings, $now)) {
-						$this->recordSkippedAlert($transition, 'suppressed', $now, $alertType, $recipient);
-						continue;
-					}
-
 					$email = $this->buildAlertEmail($transition, $alertType);
 					$reserved = $this->reserveAlertHistory([
 						'extension' => $transition['extension'],
@@ -1472,22 +1488,25 @@ class Registrationwatch implements \BMO {
 						continue;
 					}
 
-					$result = $this->sendEmail($recipient, $email['subject'], $email['message']);
-					if (!$result['status']) {
-						$this->logWarning('Alert email send failed for ' . $recipient . ' on extension ' . $transition['extension'] . ': ' . $result['message']);
-					}
-					$this->updateReservedAlertHistory(
-						(int)$transition['id'],
-						$alertType,
-						$recipient,
-						$result['status'] ? 'sent' : 'failed',
-						$result['status'] ? null : $result['message'],
-						$this->now()
-					);
+					$collectedAlerts[] = [
+						'extension' => (string)$transition['extension'],
+						'history_id' => (int)$transition['id'],
+						'reminder_n' => 0,
+						'alert_type' => $alertType,
+						'status' => (string)$transition['to_state'],
+						'recipient' => $recipient,
+						'subject' => $email['subject'],
+						'message' => $email['message'],
+						'source' => 'transition',
+					];
 				}
 			}
 
-			$this->processDueReminderQueue($now, $settings, $recipients);
+			$due = $this->collectDueReminderAlerts($now, $settings, $recipients);
+			$collectedAlerts = array_merge($collectedAlerts, $due['alerts']);
+			$reminderCycles = $due['cycles'];
+
+			$this->dispatchCollectedAlerts($collectedAlerts, $reminderCycles, $settings, $recipients, $now);
 		} catch (\Exception $e) {
 			$this->logError('Alert processing failed: ' . $e->getMessage());
 		}
@@ -1682,16 +1701,17 @@ class Registrationwatch implements \BMO {
 		]);
 	}
 
-	private function processDueReminderQueue(string $now, array $settings, array $recipients): void {
+	private function collectDueReminderAlerts(string $now, array $settings, array $recipients): array {
+		$result = ['alerts' => [], 'cycles' => []];
 		if ($settings['alert_enabled'] !== '1' || !$recipients) {
-			return;
+			return $result;
 		}
 
 		try {
 			$liveContacts = $this->getLiveContacts();
 		} catch (\Throwable $e) {
 			$this->logWarning('Reminder pass skipped because live registration status is unavailable: ' . $e->getMessage());
-			return;
+			return $result;
 		}
 
 		$stmt = $this->db()->prepare(
@@ -1718,6 +1738,7 @@ class Registrationwatch implements \BMO {
 			$reminderN = ((int)$row['alert_count']) + 1;
 			$transition = $this->buildReminderTransition($row, $currentStatus, $now);
 			$email = $this->buildAlertEmail($transition, (string)$row['alert_type']);
+			$reservedAny = false;
 
 			foreach ($recipients as $recipient) {
 				$reserved = $this->reserveAlertHistory([
@@ -1737,22 +1758,172 @@ class Registrationwatch implements \BMO {
 					continue;
 				}
 
-				$result = $this->sendEmail($recipient, $email['subject'], $email['message']);
-				if (!$result['status']) {
-					$this->logWarning('Reminder email send failed for ' . $recipient . ' on extension ' . $row['extension'] . ': ' . $result['message']);
-				}
-				$this->updateReservedAlertHistory(
-					(int)$row['history_id'],
-					(string)$row['alert_type'],
-					$recipient,
-					$result['status'] ? 'sent' : 'failed',
-					$result['status'] ? null : $result['message'],
-					$this->now(),
-					$reminderN
-				);
+				$reservedAny = true;
+				$result['alerts'][] = [
+					'extension' => (string)$row['extension'],
+					'history_id' => (int)$row['history_id'],
+					'reminder_n' => $reminderN,
+					'alert_type' => (string)$row['alert_type'],
+					'status' => $currentStatus,
+					'recipient' => $recipient,
+					'subject' => $email['subject'],
+					'message' => $email['message'],
+					'source' => 'reminder',
+				];
 			}
 
-			$this->markReminderCycleComplete($row, $reminderN, $now);
+			if ($reservedAny) {
+				$result['cycles'][(int)$row['id']] = [
+					'row' => $row,
+					'reminder_n' => $reminderN,
+				];
+			}
+		}
+
+		return $result;
+	}
+
+	private function dispatchCollectedAlerts(array $alerts, array $reminderCycles, array $settings, array $recipients, string $now): void {
+		if (!$alerts) {
+			return;
+		}
+
+		$threshold = $this->stormThreshold($settings);
+		if ($threshold > 0 && count($alerts) >= $threshold) {
+			$summaryResults = $this->dispatchStormSummary($alerts, $recipients, $now);
+			foreach ($alerts as $alert) {
+				$recipient = (string)$alert['recipient'];
+				$summaryResult = $summaryResults[$recipient] ?? ['status' => false, 'message' => 'Storm summary was not attempted for this recipient.'];
+				$coveredBySummary = !empty($summaryResult['status']);
+				$this->updateReservedAlertHistory(
+					(int)$alert['history_id'],
+					(string)$alert['alert_type'],
+					$recipient,
+					$coveredBySummary ? 'storm_suppressed' : 'storm_summary_failed',
+					$coveredBySummary ? null : (string)$summaryResult['message'],
+					$now,
+					(int)($alert['reminder_n'] ?? 0)
+				);
+			}
+			$this->markReminderCyclesComplete($reminderCycles, $now);
+			return;
+		}
+
+		foreach ($alerts as $alert) {
+			$result = $this->sendEmail((string)$alert['recipient'], (string)$alert['subject'], (string)$alert['message']);
+			if (!$result['status']) {
+				$this->logWarning('Alert email send failed for ' . $alert['recipient'] . ' on extension ' . $alert['extension'] . ': ' . $result['message']);
+			}
+			$this->updateReservedAlertHistory(
+				(int)$alert['history_id'],
+				(string)$alert['alert_type'],
+				(string)$alert['recipient'],
+				$result['status'] ? 'sent' : 'failed',
+				$result['status'] ? null : $result['message'],
+				$this->now(),
+				(int)($alert['reminder_n'] ?? 0)
+			);
+		}
+
+		$this->markReminderCyclesComplete($reminderCycles, $now);
+	}
+
+	private function stormThreshold(array $settings): int {
+		$value = isset($settings['storm_threshold']) ? trim((string)$settings['storm_threshold']) : '0';
+		if ($value === '' || !ctype_digit($value)) {
+			return 0;
+		}
+
+		return min(10000, max(0, (int)$value));
+	}
+
+	private function dispatchStormSummary(array $alerts, array $recipients, string $now): array {
+		$email = $this->buildStormSummaryEmail($alerts, $now);
+		$results = [];
+		foreach ($recipients as $recipient) {
+			$result = $this->sendEmail($recipient, $email['subject'], $email['message']);
+			$results[$recipient] = $result;
+			if (!$result['status']) {
+				$this->logWarning('Storm summary email send failed for ' . $recipient . ': ' . $result['message']);
+			}
+			$this->insertAlertHistory([
+				'extension' => '',
+				'history_id' => null,
+				'reminder_n' => 0,
+				'alert_type' => 'storm_summary',
+				'status' => 'storm_summary',
+				'recipient' => $recipient,
+				'subject' => $email['subject'],
+				'message' => $email['message'],
+				'sent_at' => $now,
+				'result' => $result['status'] ? 'sent' : 'failed',
+				'error' => $result['status'] ? null : $result['message'],
+			]);
+		}
+
+		return $results;
+	}
+
+	private function buildStormSummaryEmail(array $alerts, string $now): array {
+		$total = count($alerts);
+		$typeCounts = [];
+		$registrations = [];
+
+		foreach ($alerts as $alert) {
+			$type = (string)$alert['alert_type'];
+			$typeCounts[$type] = ($typeCounts[$type] ?? 0) + 1;
+			$key = (string)$alert['extension'] . '|' . $type . '|' . (string)$alert['status'];
+			$registrations[$key] = [
+				'extension' => (string)$alert['extension'],
+				'alert_type' => $type,
+				'status' => (string)$alert['status'],
+			];
+		}
+
+		ksort($typeCounts);
+		ksort($registrations);
+
+		$subject = sprintf(_('Registration Watch: Storm Summary (%d alerts suppressed)'), $total);
+		$message = [
+			_('Registration Watch Storm Summary'),
+			'',
+			sprintf(_('%d alert emails were suppressed in this processing pass.'), $total),
+			_('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection.'),
+			'',
+			'Time: ' . $now,
+			'',
+			_('Suppressed alert types:'),
+		];
+
+		foreach ($typeCounts as $type => $count) {
+			$message[] = sprintf('%s: %d', $this->stateLabel($type), $count);
+		}
+
+		if (count($typeCounts) === 1 && isset($typeCounts['recovery'])) {
+			$message[] = '';
+			$message[] = sprintf(_('%d recovery alerts were suppressed in this pass.'), $total);
+		}
+
+		$message[] = '';
+		$message[] = _('Watched registrations included in this pass:');
+		foreach ($registrations as $registration) {
+			$message[] = sprintf(
+				'%s - %s - %s',
+				$registration['extension'],
+				$this->stateLabel($registration['alert_type']),
+				$this->stateLabel($registration['status'])
+			);
+		}
+
+		return [
+			'subject' => $subject,
+			'message' => implode("\n", $message),
+		];
+	}
+
+	private function markReminderCyclesComplete(array $reminderCycles, string $now): void {
+		foreach ($reminderCycles as $cycle) {
+			$this->markReminderCycleComplete($cycle['row'], (int)$cycle['reminder_n'], $now);
 		}
 	}
 
@@ -1834,71 +2005,33 @@ class Registrationwatch implements \BMO {
                 return (int)$stmt->fetchColumn() > 0;
         }
 
-	private function isRepeatSuppressed(array $transition, string $alertType, string $recipient, array $settings, string $now): bool {
-		$seconds = min(self::ALERT_TIMING_MAX_SECONDS, max(0, (int)$settings['repeat_suppression_seconds']));
-		if ($seconds === 0) {
-			return false;
-		}
-
-		$since = date('Y-m-d H:i:s', strtotime($now) - $seconds);
-		$stmt = $this->db()->prepare(
-			'SELECT COUNT(*)
-			FROM registrationwatch_alert_history
-			WHERE extension = :extension
-				AND alert_type = :alert_type
-				AND recipient = :recipient
-				AND result = :result
-				AND sent_at >= :since'
-		);
-		$stmt->execute([
-			':extension' => $transition['extension'],
-			':alert_type' => $alertType,
-			':recipient' => $recipient,
-			':result' => 'sent',
-			':since' => $since,
-		]);
-
-		return (int)$stmt->fetchColumn() > 0;
-	}
-
-	private function recordSkippedAlert(array $transition, string $result, string $now, string $alertType = 'none', string $recipient = ''): void {
-		$this->insertAlertHistory([
-			'extension' => $transition['extension'],
-			'history_id' => (int)$transition['id'],
-			'alert_type' => $alertType,
-			'status' => $transition['to_state'],
-			'recipient' => $recipient,
-			'subject' => '',
-			'message' => '',
-			'sent_at' => $now,
-			'result' => $result,
-			'error' => null,
-		]);
-	}
-
 	private function runAsteriskCommand(string $command): string {
 		$astman = $this->FreePBX->astman ?? null;
 		if (!$astman) {
-			throw new \Exception(_('Asterisk manager is not available.'));
+			throw new \Exception(_('Registration Watch could not query Asterisk. Confirm the FreePBX AMI user has Command privilege.'));
 		}
 
-		if (method_exists($astman, 'Command')) {
-			$result = $astman->Command($command);
-			return is_array($result) ? implode("\n", $result) : (string)$result;
-		}
-
-		if (method_exists($astman, 'send_request')) {
-			$result = $astman->send_request('Command', ['Command' => $command]);
-			if (is_array($result)) {
-				if (isset($result['data'])) {
-					return is_array($result['data']) ? implode("\n", $result['data']) : (string)$result['data'];
-				}
-				return implode("\n", array_map('strval', $result));
+		try {
+			if (method_exists($astman, 'Command')) {
+				$result = $astman->Command($command);
+				return is_array($result) ? implode("\n", $result) : (string)$result;
 			}
-			return (string)$result;
+
+			if (method_exists($astman, 'send_request')) {
+				$result = $astman->send_request('Command', ['Command' => $command]);
+				if (is_array($result)) {
+					if (isset($result['data'])) {
+						return is_array($result['data']) ? implode("\n", $result['data']) : (string)$result['data'];
+					}
+					return implode("\n", array_map('strval', $result));
+				}
+				return (string)$result;
+			}
+		} catch (\Throwable $e) {
+			throw new \Exception(_('Registration Watch could not query Asterisk. Confirm the FreePBX AMI user has Command privilege.') . ' ' . $e->getMessage(), 0, $e);
 		}
 
-		throw new \Exception(_('Asterisk command support is not available.'));
+		throw new \Exception(_('Registration Watch could not query Asterisk. Confirm the FreePBX AMI user has Command privilege.'));
 	}
 
 	private function parseUserAgentDetails(?string $userAgent): array {
@@ -2190,6 +2323,23 @@ class Registrationwatch implements \BMO {
 	private function normaliseRepeatMode(?string $mode): string {
 		$mode = strtolower(trim((string)$mode));
 		return in_array($mode, self::REPEAT_MODES, true) ? $mode : self::REPEAT_MODE_NEVER;
+	}
+
+	private function normaliseStormThreshold(string $value): ?int {
+		$value = trim($value);
+		if ($value === '') {
+			return 0;
+		}
+		if (!ctype_digit($value)) {
+			return null;
+		}
+
+		$threshold = (int)$value;
+		if ($threshold < 0 || $threshold > 10000) {
+			return null;
+		}
+
+		return $threshold;
 	}
 
 	private function repeatIntervalSeconds(string $repeatMode, int $alertCount): ?int {

@@ -5,6 +5,11 @@ FreePBX/PBXact 17. It discovers local PJSIP extensions, records registration
 state changes, and can send email alerts when watched extensions become
 unavailable or recover.
 
+Where available, Registration Watch also shows supporting details such as IP
+address, user-agent, and firmware information. These details depend on what
+Asterisk exposes for the registration and may not be available for every phone
+or system.
+
 ## Development Branch Warning
 
 The `1-2-0_dev` branch is in active development and is not safe for production
@@ -112,6 +117,8 @@ history pruning policies.
 `registrationwatch_alert_history` stores one row per recipient and alert
 decision. The unique key `registrationwatch_alert_unique_transition_recipient`
 prevents repeated handling of the same transition, alert type, and recipient.
+Storm-suppressed rows are also stored here so the audit trail shows which
+individual messages were not sent because a Storm Summary was used.
 
 ## Alerting
 
@@ -124,8 +131,9 @@ Defaults:
 * Alert on unreachable enabled
 * Alert on not registered enabled
 * Alert on recovery enabled
-* Debounce seconds: `0`, maximum `86400`
-* Repeat suppression seconds: `0`, maximum `86400`
+* Debounce seconds: `300`, maximum `86400`
+* Repeat alerts: `Never`
+* Storm Threshold: `0`, disabled
 
 Alertable transitions:
 
@@ -136,6 +144,26 @@ Alertable transitions:
 
 First baseline transitions from Unknown are suppressed. Old status-history rows
 are not replayed later after recipient or settings changes.
+
+Repeat alert modes can send reminders while an alertable registration state
+continues. A recovery transition resets the reminder clock.
+
+Repeat alert modes:
+
+* Never: send only the initial state-change alert.
+* Every 5 minutes: repeat every 5 minutes while the registration remains unavailable.
+* Hourly: repeat once per hour while unavailable.
+* Daily: repeat once per day while unavailable.
+* Escalating: 5 minutes, 15 minutes, 1 hour, 4 hours, then daily. Recommended backoff mode.
+* Fibonacci: gradual backoff starting short and increasing up to daily, 5m, 5m, 10m, 15m, 25m, 40m, 65m, capped at daily.
+
+The default debounce delay is 300 seconds. This reduces noise from short
+reloads, restarts, and transient network events. It is not site-outage
+protection.
+
+Storm Threshold limits large batches of alerts generated in the same processing
+pass. It reduces email floods from sudden widespread registration changes, but
+it is not full correlated-outage detection.
 
 Email sending uses FreePBX/CodeIgniter mail support. Registration Watch does not
 use raw PHP `mail()` fallback. A successful local mailer handoff means the
@@ -162,9 +190,6 @@ Granular FreePBX ACL integration is still future work.
 * No webhook or SMS alert delivery yet.
 * Short flaps can be missed between reconciliation runs.
 * Email delivery depends on the PBX mail sender and relay setup.
-
-Repeat alerting beyond the existing repeat suppression behaviour is not part of
-the 1.2.0 release.
 
 ## Validation
 

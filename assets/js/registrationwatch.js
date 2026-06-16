@@ -23,9 +23,12 @@
 			'contact removed': 'Contact removed',
 			reminder: 'Repeat alert',
 			'repeat alert': 'Repeat alert',
+			storm_summary: 'Storm Summary',
+			'storm summary': 'Storm Summary',
+			storm_suppressed: 'Storm suppressed',
+			storm_summary_failed: 'Storm summary failed',
 			sent: 'Sent',
 			failed: 'Failed',
-			suppressed: 'Suppressed',
 			pending: 'Pending',
 			test: 'Test'
 		};
@@ -173,11 +176,11 @@
 			alert_enabled: $('#rw-alert-enabled').is(':checked') ? 1 : 0,
 			alert_recipients: $('#rw-alert-recipients').val(),
 			repeat_mode: $('#rw-repeat-mode').val(),
+			storm_threshold: $('#rw-storm-threshold').val(),
 			alert_on_unreachable: $('#rw-alert-on-unreachable').is(':checked') ? 1 : 0,
 			alert_on_not_registered: $('#rw-alert-on-not-registered').is(':checked') ? 1 : 0,
 			alert_on_recovery: $('#rw-alert-on-recovery').is(':checked') ? 1 : 0,
-			debounce_seconds: $('#rw-debounce-seconds').val(),
-			repeat_suppression_seconds: $('#rw-repeat-suppression-seconds').val()
+			debounce_seconds: $('#rw-debounce-seconds').val()
 		};
 	}
 

@@ -11,6 +11,7 @@
  * @var string $lastRefresh
  * @var string $refreshError
  * @var array $emailStatus
+ * @var array $timeDiagnostics
  * @var int $pollIntervalSeconds
  * @var string $csrfToken
  */
@@ -49,6 +50,10 @@ $emailStatus = isset($emailStatus) && is_array($emailStatus) ? $emailStatus : [
 	'alerts_enabled' => false,
 	'recipients_configured' => false,
 	'recipient_count' => 0,
+];
+$timeDiagnostics = isset($timeDiagnostics) && is_array($timeDiagnostics) ? $timeDiagnostics : [
+	'module_time' => '',
+	'database_time' => '',
 ];
 $pollIntervalSeconds = isset($pollIntervalSeconds) ? (int)$pollIntervalSeconds : 10;
 $csrfToken = isset($csrfToken) ? (string)$csrfToken : '';
@@ -106,9 +111,12 @@ $_rwDisplayLabel = function ($value) {
 		'contact removed' => 'Contact removed',
 		'reminder' => 'Repeat alert',
 		'repeat alert' => 'Repeat alert',
+		'storm_summary' => 'Storm Summary',
+		'storm summary' => 'Storm Summary',
+		'storm_suppressed' => 'Storm suppressed',
+		'storm_summary_failed' => 'Storm summary failed',
 		'sent' => 'Sent',
 		'failed' => 'Failed',
-		'suppressed' => 'Suppressed',
 		'pending' => 'Pending',
 		'test' => 'Test',
 	];
@@ -309,6 +317,7 @@ $_rwAssetVer = max(
 				<div class="panel-body">
 					<div class="row">
 						<div class="col-sm-6">
+							<h4><?php echo _('Alerting decision'); ?></h4>
 							<div class="checkbox">
 								<label>
 									<input type="checkbox" id="rw-alert-enabled" <?php echo ($alertSettings['alert_enabled'] ?? '0') === '1' ? 'checked' : ''; ?>>
@@ -319,28 +328,6 @@ $_rwAssetVer = max(
 								<label for="rw-alert-recipients"><?php echo _('Recipients'); ?></label>
 								<input type="text" id="rw-alert-recipients" class="form-control" value="<?php echo htmlspecialchars($alertSettings['alert_recipients'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" placeholder="<?php echo _('admin@example.com, support@example.com'); ?>">
 							</div>
-							<div class="form-group">
-								<label for="rw-debounce-seconds"><?php echo _('Debounce delay (seconds)'); ?></label>
-								<input type="number" id="rw-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('How long a problem must remain active before an alert is sent. Use 0 to alert immediately. Maximum 86400 seconds, 24 hours.'); ?></p>
-							</div>
-							<div class="form-group">
-								<label for="rw-repeat-suppression-seconds"><?php echo _('Repeat suppression (seconds)'); ?></label>
-								<input type="number" id="rw-repeat-suppression-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['repeat_suppression_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('How long to wait before sending another alert for the same extension and alert type. Use 0 to send every eligible alert. Maximum 86400 seconds, 24 hours.'); ?></p>
-							</div>
-							<div class="form-group">
-								<label for="rw-repeat-mode"><?php echo _('Repeat alerts'); ?></label>
-								<select id="rw-repeat-mode" class="form-control">
-									<?php foreach ($repeatModeOptions as $modeValue => $modeLabel): ?>
-										<option value="<?php echo htmlspecialchars($modeValue, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $currentRepeatMode === $modeValue ? 'selected' : ''; ?>>
-											<?php echo htmlspecialchars($modeLabel, ENT_QUOTES, 'UTF-8'); ?>
-										</option>
-									<?php endforeach; ?>
-								</select>
-							</div>
-						</div>
-						<div class="col-sm-6">
 							<div class="checkbox">
 								<label>
 									<input type="checkbox" id="rw-alert-on-unreachable" <?php echo ($alertSettings['alert_on_unreachable'] ?? '1') === '1' ? 'checked' : ''; ?>>
@@ -359,6 +346,49 @@ $_rwAssetVer = max(
 									<?php echo _('Alert when an extension recovers'); ?>
 								</label>
 							</div>
+						</div>
+						<div class="col-sm-6">
+							<h4><?php echo _('Alert tuning'); ?></h4>
+							<div class="form-group">
+								<label for="rw-debounce-seconds"><?php echo _('Debounce delay (seconds)'); ?></label>
+								<input type="number" id="rw-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '300', ENT_QUOTES, 'UTF-8'); ?>">
+								<p class="help-block"><?php echo _('How long a problem must remain active before the first alert is sent. The default 300 seconds reduces noise from short reloads, restarts, and transient network events. Use 0 to alert immediately. Maximum 86400 seconds, 24 hours.'); ?></p>
+							</div>
+							<div class="form-group">
+								<label for="rw-repeat-mode"><?php echo _('Repeat alerts'); ?></label>
+								<select id="rw-repeat-mode" class="form-control">
+									<?php foreach ($repeatModeOptions as $modeValue => $modeLabel): ?>
+										<option value="<?php echo htmlspecialchars($modeValue, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $currentRepeatMode === $modeValue ? 'selected' : ''; ?>>
+											<?php echo htmlspecialchars($modeLabel, ENT_QUOTES, 'UTF-8'); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+								<p class="help-block">
+									<?php echo _('Never: send only the initial state-change alert.'); ?><br>
+									<?php echo _('Every 5 minutes: repeat every 5 minutes while the registration remains unavailable.'); ?><br>
+									<?php echo _('Hourly: repeat once per hour while unavailable.'); ?><br>
+									<?php echo _('Daily: repeat once per day while unavailable.'); ?><br>
+									<?php echo _('Escalating: 5 minutes, 15 minutes, 1 hour, 4 hours, then daily. Recommended backoff mode.'); ?><br>
+									<?php echo _('Fibonacci: gradual backoff starting short and increasing up to daily, 5m, 5m, 10m, 15m, 25m, 40m, 65m, capped at daily.'); ?>
+								</p>
+							</div>
+							<p class="help-block"><?php echo _('Per-extension repeat overrides can be set in the Watched extensions table.'); ?></p>
+							<div class="form-group">
+								<label for="rw-storm-threshold"><?php echo _('Storm Threshold'); ?></label>
+								<input type="number" id="rw-storm-threshold" class="form-control" min="0" max="10000" step="1" value="<?php echo htmlspecialchars($alertSettings['storm_threshold'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
+								<p class="help-block"><?php echo _('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. Use 0 to disable.'); ?></p>
+							</div>
+							<p class="help-block">
+								<?php echo _('Module time'); ?>:
+								<?php echo htmlspecialchars((string)($timeDiagnostics['module_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
+								|
+								<?php echo _('Database time'); ?>:
+								<?php echo htmlspecialchars((string)($timeDiagnostics['database_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>
+							</p>
+						</div>
+					</div>
+					<div class="row">
+						<div class="col-sm-12">
 							<div class="rw-actions">
 								<button type="button" id="rw-save-alerts" class="btn btn-primary">
 									<i class="fa fa-save"></i> <?php echo _('Save'); ?>
@@ -579,9 +609,12 @@ $_rwAssetVer = max(
 				'contact removed': 'Contact removed',
 				sent: 'Sent',
 				failed: 'Failed',
-				suppressed: 'Suppressed',
 				reminder: 'Repeat alert',
 				'repeat alert': 'Repeat alert',
+				storm_summary: 'Storm Summary',
+				'storm summary': 'Storm Summary',
+				storm_suppressed: 'Storm suppressed',
+				storm_summary_failed: 'Storm summary failed',
 				pending: 'Pending',
 				test: 'Test'
 			};

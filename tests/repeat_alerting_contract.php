@@ -88,6 +88,58 @@ function handoff_escalation(PDO $db, string $extension, int $historyId, string $
 	]);
 }
 
+function storm_contract_decision(array $alerts, $threshold, array $summaryResults = []): array {
+	$threshold = trim((string)$threshold);
+	$threshold = $threshold !== '' && ctype_digit($threshold) ? (int)$threshold : 0;
+	$recipients = [];
+	foreach ($alerts as $alert) {
+		$recipients[$alert['recipient']] = true;
+	}
+
+	if ($threshold <= 0 || count($alerts) < $threshold) {
+		return [
+			'individuals' => array_map(function ($alert) {
+				$alert['result'] = 'sent';
+				return $alert;
+			}, $alerts),
+			'summaries' => [],
+			'history' => array_map(function ($alert) {
+				$alert['result'] = 'sent';
+				return $alert;
+			}, $alerts),
+		];
+	}
+
+	$history = array_map(function ($alert) use ($summaryResults) {
+		$recipient = $alert['recipient'];
+		$summaryResult = $summaryResults[$recipient] ?? ['status' => true, 'message' => ''];
+		$alert['result'] = $summaryResult['status'] ? 'storm_suppressed' : 'storm_summary_failed';
+		$alert['error'] = $summaryResult['status'] ? null : $summaryResult['message'];
+		return $alert;
+	}, $alerts);
+	$allRecovery = count($alerts) > 0;
+	foreach ($alerts as $alert) {
+		$allRecovery = $allRecovery && $alert['alert_type'] === 'recovery';
+	}
+	$message = count($alerts) . ' alert emails were suppressed in this processing pass.';
+	if ($allRecovery) {
+		$message .= "\n" . count($alerts) . ' recovery alerts were suppressed in this pass.';
+	}
+
+	return [
+		'individuals' => [],
+		'summaries' => array_map(function ($recipient) use ($message, $summaryResults) {
+			$summaryResult = $summaryResults[$recipient] ?? ['status' => true, 'message' => ''];
+			return [
+				'recipient' => $recipient,
+				'result' => $summaryResult['status'] ? 'sent' : 'failed',
+				'message' => $message,
+			];
+		}, array_keys($recipients)),
+		'history' => $history,
+	];
+}
+
 $db = new PDO('sqlite::memory:');
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $db->exec(
@@ -255,6 +307,69 @@ $row = $db->query("SELECT alert_type, alert_count, next_due_at FROM registration
 assert_true($row['alert_type'] === 'not_registered', 'flap path should hand off repeatedly without recovery');
 assert_true((int)$row['alert_count'] === 3, 'flap path should keep climbing instead of resetting to zero');
 assert_true($row['next_due_at'] === '2026-06-15 15:20:00', 'flap path should preserve the climbing due time');
+
+$stormAlerts = [
+	['extension' => '3001', 'alert_type' => 'unreachable', 'status' => 'Unreachable', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
+	['extension' => '3002', 'alert_type' => 'not_registered', 'status' => 'Not registered', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
+];
+$decision = storm_contract_decision($stormAlerts, 3);
+assert_true(count($decision['individuals']) === 2, 'below storm threshold should send individual alerts');
+assert_true(count($decision['summaries']) === 0, 'below storm threshold should not send a summary');
+
+$decision = storm_contract_decision($stormAlerts, 2);
+assert_true(count($decision['individuals']) === 0, 'at storm threshold should suppress individual sends');
+assert_true(count($decision['summaries']) === 1, 'at storm threshold should send one summary per recipient');
+assert_true(count(array_filter($decision['history'], function ($row) {
+	return $row['result'] === 'storm_suppressed';
+})) === 2, 'storm suppressed individual rows should be logged as storm_suppressed');
+$failedSummaryDecision = storm_contract_decision($stormAlerts, 2, [
+	'admin@example.invalid' => ['status' => false, 'message' => 'mailer down'],
+]);
+assert_true(count(array_filter($failedSummaryDecision['history'], function ($row) {
+	return $row['result'] === 'storm_summary_failed' && $row['error'] === 'mailer down';
+})) === 2, 'individual rows should not be marked storm_suppressed when the recipient summary fails');
+
+$sharedCounterAlerts = [
+	['extension' => '3003', 'alert_type' => 'unreachable', 'status' => 'Unreachable', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
+	['extension' => '3004', 'alert_type' => 'not_registered', 'status' => 'Not registered', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
+	['extension' => '3005', 'alert_type' => 'unreachable', 'status' => 'Unreachable', 'recipient' => 'admin@example.invalid', 'source' => 'reminder'],
+];
+$decision = storm_contract_decision($sharedCounterAlerts, 3);
+assert_true(count($decision['summaries']) === 1 && count($decision['individuals']) === 0, 'transition alerts and due reminders should share one storm counter');
+
+$recoveryDecision = storm_contract_decision([
+	['extension' => '3006', 'alert_type' => 'recovery', 'status' => 'Reachable', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
+	['extension' => '3007', 'alert_type' => 'recovery', 'status' => 'Reachable', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
+], 2);
+assert_true(count($recoveryDecision['summaries']) === 1, 'mass recovery pass should send one recovery storm summary');
+assert_true(strpos($recoveryDecision['summaries'][0]['message'], 'recovery alerts were suppressed in this pass') !== false, 'recovery storm summary should use per-pass wording');
+assert_true(strpos($recoveryDecision['summaries'][0]['message'], 'site outage has recovered') === false, 'recovery storm summary must not make a continuity claim');
+
+$disabledDecision = storm_contract_decision($sharedCounterAlerts, 0);
+assert_true(count($disabledDecision['individuals']) === 3, 'storm threshold 0 should disable summaries');
+assert_true(count($disabledDecision['summaries']) === 0, 'storm threshold 0 should send no summary');
+$emptyDecision = storm_contract_decision($sharedCounterAlerts, '');
+assert_true(count($emptyDecision['individuals']) === 3, 'empty storm threshold should disable summaries');
+
+foreach ([$decision, $recoveryDecision] as $stormDecision) {
+	assert_true(!(count($stormDecision['summaries']) > 0 && count($stormDecision['individuals']) > 0), 'one pass should never send both summary and individual emails');
+}
+
+$db->exec(
+	"INSERT INTO registrationwatch_alert_escalation
+		(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode)
+	VALUES
+		('3008', 30, 'not_registered', '2026-06-15 10:00:00', '2026-06-15 10:00:00', 1, '2026-06-15 10:05:00', 'escalating')"
+);
+$stormReminderDecision = storm_contract_decision([
+	['extension' => '3008', 'alert_type' => 'not_registered', 'status' => 'Not registered', 'recipient' => 'admin@example.invalid', 'source' => 'reminder'],
+	['extension' => '3009', 'alert_type' => 'not_registered', 'status' => 'Not registered', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
+], 2);
+assert_true(count($stormReminderDecision['summaries']) === 1, 'storm reminder pass should summarise at threshold');
+$db->exec("UPDATE registrationwatch_alert_escalation SET alert_count = 2, last_alert_at = '2026-06-15 10:05:00', next_due_at = '2026-06-15 10:20:00' WHERE extension = '3008'");
+$row = $db->query("SELECT alert_count, next_due_at FROM registrationwatch_alert_escalation WHERE extension = '3008'")->fetch(PDO::FETCH_ASSOC);
+assert_true((int)$row['alert_count'] === 2, 'storm-suppressed reminder should still advance alert_count');
+assert_true($row['next_due_at'] === '2026-06-15 10:20:00', 'storm-suppressed reminder should move next_due_at so it does not re-storm next tick');
 
 assert_true(fibonacci_interval_seconds(1) === 300, 'fibonacci reminder 1 should wait 5 minutes');
 assert_true(fibonacci_interval_seconds(2) === 300, 'fibonacci reminder 2 should also wait 5 minutes by contract');
