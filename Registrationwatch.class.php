@@ -31,16 +31,14 @@ class Registrationwatch implements \BMO {
 	const REPEAT_MODE_ESCALATING = 'escalating';
 	const REPEAT_MODE_FIBONACCI = 'fibonacci';
 	const REPEAT_DAILY_SECONDS = 86400;
-	const REPEAT_ESCALATING_SECONDS = [300, 900, 3600, 14400, 86400];
-	const REPEAT_FIBONACCI_BASE_SECONDS = 300;
-	const REPEAT_FIBONACCI_CEILING_SECONDS = 86400;
+	const REPEAT_ESCALATING_BASE_SECONDS = 300;
+	const REPEAT_ESCALATING_CEILING_SECONDS = 86400;
 	const REPEAT_MODES = [
 		self::REPEAT_MODE_NEVER,
 		self::REPEAT_MODE_FIVE_MINUTES,
 		self::REPEAT_MODE_HOURLY,
 		self::REPEAT_MODE_DAILY,
 		self::REPEAT_MODE_ESCALATING,
-		self::REPEAT_MODE_FIBONACCI,
 	];
 
 	private $settingsDefaults = [
@@ -2941,6 +2939,10 @@ class Registrationwatch implements \BMO {
 
 	private function normaliseRepeatMode(?string $mode): string {
 		$mode = strtolower(trim((string)$mode));
+		if ($mode === self::REPEAT_MODE_FIBONACCI) {
+			return self::REPEAT_MODE_ESCALATING;
+		}
+
 		return in_array($mode, self::REPEAT_MODES, true) ? $mode : self::REPEAT_MODE_NEVER;
 	}
 
@@ -2971,8 +2973,6 @@ class Registrationwatch implements \BMO {
 				return self::REPEAT_DAILY_SECONDS;
 			case self::REPEAT_MODE_ESCALATING:
 				return $this->escalatingRepeatIntervalSeconds($alertCount);
-			case self::REPEAT_MODE_FIBONACCI:
-				return $this->fibonacciRepeatIntervalSeconds($alertCount);
 			case self::REPEAT_MODE_NEVER:
 			default:
 				return null;
@@ -2993,16 +2993,10 @@ class Registrationwatch implements \BMO {
 		return date('Y-m-d H:i:s', $timestamp + $interval);
 	}
 
-	private function escalatingRepeatIntervalSeconds(int $alertCount): int {
-		$index = max(0, $alertCount - 1);
-		$lastIndex = count(self::REPEAT_ESCALATING_SECONDS) - 1;
-		return self::REPEAT_ESCALATING_SECONDS[min($index, $lastIndex)];
-	}
-
 	// alert_count is the number of reminders already sent. This returns the
-	// wait until the next reminder; Fibonacci deliberately opens with two
+	// wait until the next reminder; Escalating deliberately opens with two
 	// 5-minute gaps, then grows on the same 5-minute base up to the daily cap.
-	private function fibonacciRepeatIntervalSeconds(int $alertCount): int {
+	private function escalatingRepeatIntervalSeconds(int $alertCount): int {
 		$step = max(1, $alertCount);
 		$previous = 0;
 		$current = 1;
@@ -3012,14 +3006,14 @@ class Registrationwatch implements \BMO {
 			$previous = $current;
 			$current = $next;
 
-			if ($current * self::REPEAT_FIBONACCI_BASE_SECONDS >= self::REPEAT_FIBONACCI_CEILING_SECONDS) {
-				return self::REPEAT_FIBONACCI_CEILING_SECONDS;
+			if ($current * self::REPEAT_ESCALATING_BASE_SECONDS >= self::REPEAT_ESCALATING_CEILING_SECONDS) {
+				return self::REPEAT_ESCALATING_CEILING_SECONDS;
 			}
 		}
 
 		return min(
-			self::REPEAT_FIBONACCI_CEILING_SECONDS,
-			$current * self::REPEAT_FIBONACCI_BASE_SECONDS
+			self::REPEAT_ESCALATING_CEILING_SECONDS,
+			$current * self::REPEAT_ESCALATING_BASE_SECONDS
 		);
 	}
 

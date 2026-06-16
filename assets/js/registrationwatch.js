@@ -138,10 +138,12 @@
 			['5m', 'Every 5 minutes'],
 			['hourly', 'Hourly'],
 			['daily', 'Daily'],
-			['escalating', 'Escalating (5m → 15m → 1h → 4h → daily)'],
-			['fibonacci', 'Fibonacci (escalating)']
+			['escalating', 'Escalating']
 		];
 		var selected = String(selectedMode || '');
+		if (selected === 'fibonacci') {
+			selected = 'escalating';
+		}
 		var html = '';
 
 		$.each(options, function (_, option) {

@@ -65,10 +65,12 @@ $repeatModeOptions = [
 	'5m' => _('Every 5 minutes'),
 	'hourly' => _('Hourly'),
 	'daily' => _('Daily'),
-	'escalating' => _('Escalating (5m → 15m → 1h → 4h → daily)'),
-	'fibonacci' => _('Fibonacci (escalating)'),
+	'escalating' => _('Escalating'),
 ];
 $currentRepeatMode = isset($alertSettings['repeat_mode']) ? strtolower((string)$alertSettings['repeat_mode']) : 'never';
+if ($currentRepeatMode === 'fibonacci') {
+	$currentRepeatMode = 'escalating';
+}
 if (!array_key_exists($currentRepeatMode, $repeatModeOptions)) {
 	$currentRepeatMode = 'never';
 }
@@ -303,8 +305,14 @@ $_rwAssetVer = max(
 											<td data-label="<?php echo _('Repeat alerts'); ?>">
 												<select class="form-control input-sm rw-repeat-mode" data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>">
 													<option value=""><?php echo _('Use global'); ?></option>
+													<?php
+													$registrationRepeatMode = isset($registration['repeat_mode']) ? (string)$registration['repeat_mode'] : '';
+													if ($registrationRepeatMode === 'fibonacci') {
+														$registrationRepeatMode = 'escalating';
+													}
+													?>
 													<?php foreach ($repeatModeOptions as $modeValue => $modeLabel): ?>
-														<option value="<?php echo htmlspecialchars($modeValue, ENT_QUOTES, 'UTF-8'); ?>" <?php echo isset($registration['repeat_mode']) && (string)$registration['repeat_mode'] === $modeValue ? 'selected' : ''; ?>>
+														<option value="<?php echo htmlspecialchars($modeValue, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $registrationRepeatMode === $modeValue ? 'selected' : ''; ?>>
 															<?php echo htmlspecialchars($modeLabel, ENT_QUOTES, 'UTF-8'); ?>
 														</option>
 													<?php endforeach; ?>
@@ -410,8 +418,7 @@ $_rwAssetVer = max(
 									<?php echo _('Every 5 minutes: repeat every 5 minutes while the registration remains unavailable.'); ?><br>
 									<?php echo _('Hourly: repeat once per hour while unavailable.'); ?><br>
 									<?php echo _('Daily: repeat once per day while unavailable.'); ?><br>
-									<?php echo _('Escalating: 5 minutes, 15 minutes, 1 hour, 4 hours, then daily. Recommended backoff mode.'); ?><br>
-									<?php echo _('Fibonacci: Reminders start frequent and gradually space out as an outage continues, settling to once per day, so a long outage does not flood you.'); ?>
+									<?php echo _('Escalating: Escalating uses a Fibonacci-style backoff schedule, starting with shorter reminders and gradually increasing the interval up to daily.'); ?>
 								</p>
 							</div>
 							<p class="help-block"><?php echo _('Per-extension repeat overrides can be set in the Watched Extensions table.'); ?></p>

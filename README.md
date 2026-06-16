@@ -155,8 +155,9 @@ Repeat alert modes:
 * Every 5 minutes: repeat every 5 minutes while the registration remains unavailable.
 * Hourly: repeat once per hour while unavailable.
 * Daily: repeat once per day while unavailable.
-* Escalating: 5 minutes, 15 minutes, 1 hour, 4 hours, then daily. Recommended backoff mode.
-* Fibonacci: gradual backoff starting short and increasing up to daily, 5m, 5m, 10m, 15m, 25m, 40m, 65m, capped at daily.
+* Escalating: uses a Fibonacci-style backoff schedule, starting with shorter reminders and gradually increasing the interval up to daily.
+
+Stored legacy `fibonacci` repeat-mode values are treated as Escalating.
 
 The default debounce delay is 300 seconds. This reduces noise from short
 reloads, restarts, and transient network events. It is not site-outage
