@@ -105,6 +105,28 @@ function enrich_for_identity_contract(array $contact, array $registrarDetails): 
 	return $contact;
 }
 
+function filter_allowlisted_contacts(array $contacts, array $allowedDevices): array {
+	$allowed = [];
+	foreach ($allowedDevices as $id) {
+		$id = strtolower(trim((string)$id));
+		if ($id !== '') {
+			$allowed[$id] = true;
+		}
+	}
+
+	$result = ['accepted' => [], 'ignored' => []];
+	foreach ($contacts as $contact) {
+		$extension = strtolower(trim((string)($contact['extension'] ?? '')));
+		if (isset($allowed[$extension])) {
+			$result['accepted'][] = $contact;
+		} else {
+			$result['ignored'][] = $contact;
+		}
+	}
+
+	return $result;
+}
+
 function should_auto_disable_absent(array $registration, int $thresholdSeconds, string $now): bool {
 	if ($thresholdSeconds <= 0 || (int)($registration['enabled'] ?? 0) !== 1 || !empty($registration['auto_disabled_absent_at'])) {
 		return false;
@@ -366,6 +388,40 @@ $fallbackContact = enrich_for_identity_contract(
 	]
 );
 assert_true(($fallbackContact['user_agent'] ?? null) === null, 'fallback enrichment must not copy a sibling UA into identity');
+
+$allowlisted = filter_allowlisted_contacts([
+	['extension' => '2005', 'source_ip' => '198.51.100.70', 'contact_uri' => 'sip:2005@198.51.100.70:5060', 'user_agent' => 'DeskPhone/1'],
+	['extension' => '2005', 'source_ip' => '198.51.100.71', 'contact_uri' => 'sip:2005@198.51.100.71:5060', 'user_agent' => 'SoftPhone/2'],
+	['extension' => 'magrathea-in-1', 'source_ip' => '87.238.1.10', 'contact_uri' => 'sip:87.238.1.10', 'user_agent' => null],
+	['extension' => 'magrathea-in-4', 'source_ip' => '87.238.1.14', 'contact_uri' => 'sip:87.238.1.14', 'user_agent' => null],
+], ['2005']);
+assert_true(count($allowlisted['accepted']) === 2, 'allowlisted device contacts should continue into multi-contact resolution');
+assert_true(count($allowlisted['ignored']) === 2, 'trunk-like contacts not present in devices should be ignored');
+$allowlistedResolved = [];
+foreach ($allowlisted['accepted'] as $contact) {
+	foreach (resolve_identity_group([$contact]) as $resolved) {
+		$allowlistedResolved[] = $resolved;
+	}
+}
+assert_true(count($allowlistedResolved) === 2, 'multi-contact allowlisted device should still produce watched registrations');
+assert_true($allowlistedResolved[0]['registration_key'] !== $allowlistedResolved[1]['registration_key'], 'allowlisted sibling contacts on different IPs should remain distinct');
+
+$trunkKey = registration_key('magrathea-in-1', '87.238.1.10');
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$trunkKey, 'magrathea-in-1', '87.238.1.10', 1, 'hourly', 'Reachable']);
+$trunkReg = (int)$db->lastInsertId();
+$db->prepare(
+	'INSERT INTO registrationwatch_alert_escalation
+		(registration_id, registration_key, extension, history_id, alert_type, active_since, next_due_at, repeat_mode)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+)->execute([$trunkReg, $trunkKey, 'magrathea-in-1', 77, 'not_registered', '2026-06-15 10:00:00', '2026-06-15 11:00:00', 'hourly']);
+$allowedDeviceIds = ['2005' => true];
+if (!isset($allowedDeviceIds[strtolower(trim('magrathea-in-1'))])) {
+	$db->prepare('DELETE FROM registrationwatch_alert_escalation WHERE registration_id = ?')->execute([$trunkReg]);
+	$db->prepare('UPDATE registrationwatch_registrations SET enabled = 0 WHERE id = ?')->execute([$trunkReg]);
+}
+assert_true((int)$db->query("SELECT enabled FROM registrationwatch_registrations WHERE id = {$trunkReg}")->fetchColumn() === 0, 'stored non-device registration should be disabled by allowlist reconciliation');
+assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE registration_id = {$trunkReg}")->fetchColumn() === 0, 'stored non-device registration should have escalation cleared');
 
 $storm = storm_contract_decision([
 	['registration_id' => $regA, 'extension' => '2001', 'recipient' => 'admin@example.invalid'],

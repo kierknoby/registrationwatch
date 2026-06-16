@@ -855,6 +855,25 @@ class Registrationwatch implements \BMO {
 		return $registrations;
 	}
 
+	private function getAllowedPjsipDeviceIds(): array {
+		if (!$this->tableExists('devices')) {
+			return [];
+		}
+
+		$stmt = $this->db()->query("SELECT id FROM devices WHERE LOWER(tech) = 'pjsip' AND id <> ''");
+		$ids = $stmt ? $stmt->fetchAll(\PDO::FETCH_COLUMN, 0) : [];
+		$allowed = [];
+
+		foreach ($ids as $id) {
+			$id = $this->normaliseRegistrationExtension((string)$id);
+			if ($id !== '') {
+				$allowed[$id] = true;
+			}
+		}
+
+		return $allowed;
+	}
+
 	private function getRegistrationDescriptions(): array {
 		$db = $this->db();
 		$descriptions = [];
@@ -900,16 +919,23 @@ class Registrationwatch implements \BMO {
 		$registrations = $this->getStoredRegistrations();
 		$settings = $this->getAlertSettings();
 		$autoDisableAbsentSeconds = $this->autoDisableAbsentSeconds($settings);
+		$allowedDevices = $this->getAllowedPjsipDeviceIds();
 
 		foreach ($registrations as $registration) {
 			if ((int)$registration['discovered'] === 0) {
 				continue;
 			}
 
+			$registrationId = (int)$registration['id'];
+			$extension = $this->normaliseRegistrationExtension((string)($registration['extension'] ?? ''));
+			if (!isset($allowedDevices[$extension])) {
+				$this->disableNonDeviceRegistration($registrationId, $now);
+				continue;
+			}
+
 			$previousStatus = $this->normaliseState($registration['last_known_status'] ?? self::STATUS_UNKNOWN);
 			$previousContactUri = $registration['contact_uri'] ?? null;
 			$previousHadContact = $this->hadRegisteredState($previousStatus) || (string)($registration['contact_uri'] ?? '') !== '';
-			$registrationId = (int)$registration['id'];
 			$registrationKey = (string)$registration['registration_key'];
 			$contact = $contacts[$registrationKey] ?? null;
 			$status = self::STATUS_NOT_REGISTERED;
@@ -1019,6 +1045,25 @@ class Registrationwatch implements \BMO {
 		$this->processAlertQueue($now);
 	}
 
+	private function disableNonDeviceRegistration(int $registrationId, string $now): void {
+		$this->deleteEscalationsForRegistration($registrationId);
+		$stmt = $this->db()->prepare(
+			'UPDATE registrationwatch_registrations
+			SET enabled = 0,
+				discovered = 0,
+				updated_at = :updated_at
+			WHERE id = :id
+				AND (enabled <> 0 OR discovered <> 0)'
+		);
+		$stmt->execute([
+			':updated_at' => $now,
+			':id' => $registrationId,
+		]);
+		if ($stmt->rowCount() > 0) {
+			$this->logInfo('Ignored stored registration because it is not a configured PJSIP device: id ' . $registrationId);
+		}
+	}
+
 	private function acquireReconcileLock(): bool {
 		try {
 			$stmt = $this->db()->query("SELECT GET_LOCK('registrationwatch_reconcile', 0)");
@@ -1078,10 +1123,13 @@ class Registrationwatch implements \BMO {
 
 		$contacts = [];
 		$pending = [];
+		$allowedDevices = $this->getAllowedPjsipDeviceIds();
 		$registrarDetails = $this->getRegistrarContactDetails();
 		$existingIdentityClasses = $this->getStoredRegistrationIdentityClasses();
 		$lineCount = 0;
 		$parsedCount = 0;
+		$acceptedCount = 0;
+		$ignoredNonDeviceCount = 0;
 		$failureCount = 0;
 		$firstFailedLine = null;
 
@@ -1104,6 +1152,11 @@ class Registrationwatch implements \BMO {
 			}
 
 			$parsedCount++;
+			if (!isset($allowedDevices[$parsed['extension']])) {
+				$ignoredNonDeviceCount++;
+				continue;
+			}
+
 			$parsed = $this->enrichLiveContactFromRegistrar($parsed, $registrarDetails);
 			if ($this->normaliseSourceIp($parsed['source_ip'] ?? '') === '') {
 				$this->logWarning('PJSIP contact skipped because Registration Watch could not resolve a source IP: ' . substr($line, 0, 100));
@@ -1111,6 +1164,7 @@ class Registrationwatch implements \BMO {
 			}
 			$identityGroup = $this->registrationIdentityGroupKey($parsed['extension'], $parsed['source_ip']);
 			$pending[$identityGroup][] = $parsed;
+			$acceptedCount++;
 		}
 
 		foreach ($pending as $identityGroup => $items) {
@@ -1131,6 +1185,12 @@ class Registrationwatch implements \BMO {
 		if ($lineCount > 0 && $failureCount > 0) {
 			$this->logWarning('PJSIP contact parsing: ' . $parsedCount . ' parsed, ' . $failureCount . ' failed. Example: ' . $firstFailedLine);
 		}
+		$this->logInfo(sprintf(
+			'PJSIP live contacts seen: %d, accepted: %d, ignored as non-device: %d.',
+			$parsedCount,
+			$acceptedCount,
+			$ignoredNonDeviceCount
+		));
 
 		return $contacts;
 	}
@@ -3179,6 +3239,16 @@ class Registrationwatch implements \BMO {
 		try {
 			if (method_exists('\FreePBX', 'Log')) {
 				\FreePBX::Log()->warning('registrationwatch: ' . $message);
+			}
+		} catch (\Exception $e) {
+			// Logging unavailable; silently continue
+		}
+	}
+
+	private function logInfo(string $message): void {
+		try {
+			if (method_exists('\FreePBX', 'Log')) {
+				\FreePBX::Log()->info('registrationwatch: ' . $message);
 			}
 		} catch (\Exception $e) {
 			// Logging unavailable; silently continue
