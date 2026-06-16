@@ -134,6 +134,17 @@ $_rwDisplayLabel = function ($value) {
 	return ucwords(str_replace('_', ' ', $value));
 };
 
+$_rwHistoryRowClass = function ($toState) {
+	$s = strtolower(trim((string)$toState));
+	if ($s === 'reachable' || $s === 'registered (no qualify)') {
+		return 'rw-history-row-ok';
+	}
+	if ($s === 'unreachable' || $s === 'not registered') {
+		return 'rw-history-row-bad';
+	}
+	return 'rw-history-row-neutral';
+};
+
 $_rwContactExpiryText = function ($expiresAt) {
 	$expiresAt = trim((string)$expiresAt);
 	if ($expiresAt === '') {
@@ -482,7 +493,7 @@ $_rwAssetVer = max(
 							</thead>
 							<tbody>
 								<?php foreach ($statusHistory as $entry): ?>
-									<tr data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>">
+									<tr data-history-id="<?php echo (int)($entry['id'] ?? 0); ?>" class="<?php echo $_rwHistoryRowClass($entry['to_state'] ?? ''); ?>">
 										<td data-label="<?php echo _('Time'); ?>"><?php echo htmlspecialchars($entry['created_at'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
 										<td data-label="<?php echo _('Extension'); ?>"><?php echo htmlspecialchars($entry['extension'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
 										<td data-label="<?php echo _('From'); ?>"><?php echo htmlspecialchars($_rwDisplayLabel($entry['from_state'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>

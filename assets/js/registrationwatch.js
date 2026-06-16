@@ -266,13 +266,24 @@
 		$(document).trigger('registrationwatch:history-rendered');
 	}
 
+	function historyRowClass(toState) {
+		var s = $.trim(String(toState || '')).toLowerCase();
+		if (s === 'reachable' || s === 'registered (no qualify)') {
+			return 'rw-history-row-ok';
+		}
+		if (s === 'unreachable' || s === 'not registered') {
+			return 'rw-history-row-bad';
+		}
+		return 'rw-history-row-neutral';
+	}
+
 	function renderHistoryRows(history) {
 		var rows = [];
 		$.each(history || [], function (_, entry) {
 			var latency = entry.latency_ms ? escapeHtml(entry.latency_ms) + ' ms' : '-';
 			var id = parseInt(entry.id, 10) || 0;
 			rows.push(
-				'<tr data-history-id="' + id + '">' +
+				'<tr data-history-id="' + id + '" class="' + historyRowClass(entry.to_state) + '">' +
 					'<td data-label="Time">' + escapeHtml(entry.created_at) + '</td>' +
 					'<td data-label="Extension">' + escapeHtml(entry.extension) + '</td>' +
 					'<td data-label="From">' + escapeHtml(displayLabel(entry.from_state)) + '</td>' +

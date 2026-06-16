@@ -123,6 +123,18 @@
 	margin-right: 6px;
 }
 
+.registrationwatch .rw-history > tbody > tr {
+	background-color: #fff;
+}
+
+.registrationwatch .rw-history > tbody > tr.rw-history-row-ok {
+	background-color: #dff0d8;
+}
+
+.registrationwatch .rw-history > tbody > tr.rw-history-row-bad {
+	background-color: #f2dede;
+}
+
 .registrationwatch .rw-history-control-row {
 	display: flex;
 	align-items: flex-start;
