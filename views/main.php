@@ -401,8 +401,8 @@ $_rwAssetVer = max(
 							<h4><?php echo _('Alert tuning'); ?></h4>
 							<div class="form-group">
 								<label for="rw-debounce-seconds"><?php echo _('Debounce delay (seconds)'); ?></label>
-								<input type="number" id="rw-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '300', ENT_QUOTES, 'UTF-8'); ?>">
-								<p class="help-block"><?php echo _('How long a problem must remain active before the first alert is sent. The default 300 seconds reduces noise from short reloads, restarts, and transient network events. Use 0 to alert immediately. Maximum 86400 seconds, 24 hours.'); ?></p>
+								<input type="number" id="rw-debounce-seconds" class="form-control" min="0" max="86400" step="1" value="<?php echo htmlspecialchars($alertSettings['debounce_seconds'] ?? '0', ENT_QUOTES, 'UTF-8'); ?>">
+								<p class="help-block"><?php echo _('How long a problem must remain active before the first alert is sent. The default 0 seconds alerts immediately. Increase this value to reduce noise from short reloads, restarts, and transient network events. Maximum 86400 seconds, 24 hours.'); ?></p>
 							</div>
 							<div class="form-group">
 								<label for="rw-repeat-mode"><?php echo _('Repeat alerts'); ?></label>

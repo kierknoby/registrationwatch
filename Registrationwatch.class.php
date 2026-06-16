@@ -50,7 +50,7 @@ class Registrationwatch implements \BMO {
 		'alert_on_unreachable' => '1',
 		'alert_on_not_registered' => '1',
 		'alert_on_recovery' => '1',
-		'debounce_seconds' => '300',
+		'debounce_seconds' => '0',
 		'auto_disable_absent_seconds' => '2592000',
 		'trusted_vpn_networks' => '',
 		'topology_poll_interval_seconds' => '10',
@@ -2046,9 +2046,10 @@ class Registrationwatch implements \BMO {
 			$debounceSeconds = min(self::ALERT_TIMING_MAX_SECONDS, max(0, (int)$settings['debounce_seconds']));
 			$cutoff = date('Y-m-d H:i:s', strtotime($now) - $debounceSeconds);
 			// Alerts are allowed only for fresh eligible registration transitions.
-			// The stale window is debounce_seconds plus 300 seconds, so old
-			// status-history rows cannot be replayed later after recipient or
-			// settings changes, while legitimate debounce delays still work.
+			// Freshness is measured using the configured debounce delay plus
+			// ALERT_STALE_TRANSITION_MAX_SECONDS. This prevents old status-history rows
+			// being replayed later after recipient or settings changes, while still
+			// allowing legitimate debounce-delayed alerts to fire.
 			$staleCutoff = date('Y-m-d H:i:s', strtotime($now) - ($debounceSeconds + self::ALERT_STALE_TRANSITION_MAX_SECONDS));
 			$stmt = $this->db()->prepare(
 				'SELECT h.id, h.registration_id, h.registration_key, h.extension, h.from_state, h.to_state, h.source, h.reason,

@@ -131,7 +131,7 @@ Defaults:
 * Alert on unreachable enabled
 * Alert on not registered enabled
 * Alert on recovery enabled
-* Debounce seconds: `300`, maximum `86400`
+* Debounce seconds: `0`, maximum `86400`
 * Repeat alerts: `Never`
 * Storm Threshold: `20`
 * Auto-disable absent registrations: `2592000` seconds, 30 days
@@ -159,9 +159,7 @@ Repeat alert modes:
 
 Stored legacy `fibonacci` repeat-mode values are treated as Escalating.
 
-The default debounce delay is 300 seconds. This reduces noise from short
-reloads, restarts, and transient network events. It is not site-outage
-protection.
+The default debounce delay is 0 seconds, so first alerts are sent immediately when an alertable problem is detected. Increase this value to reduce noise from short reloads, restarts, and transient network events.
 
 Storm Threshold limits large batches of alerts generated in the same processing
 pass. It reduces email floods from sudden widespread registration changes, but
