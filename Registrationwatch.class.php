@@ -126,16 +126,24 @@ class Registrationwatch implements \BMO {
 			// Restore stored registrations (preserve discovery flags)
 			if (isset($backup['registrations']) && is_array($backup['registrations'])) {
 				foreach ($backup['registrations'] as $row) {
+					$sourceIp = $this->normaliseSourceIp($row['source_ip'] ?? '');
+					$uaClass = isset($row['registration_ua_class']) ? (string)$row['registration_ua_class'] : '';
+					$registrationKey = isset($row['registration_key']) && $row['registration_key'] !== ''
+						? (string)$row['registration_key']
+						: ($sourceIp !== '' ? $this->registrationKey((string)$row['extension'], $sourceIp, $uaClass) : '');
+					if ($registrationKey === '') {
+						continue;
+					}
 					$stmt = $db->prepare(
 						'INSERT INTO registrationwatch_registrations
-							(extension, description, notes, notes_updated_at, enabled, repeat_mode, discovered, last_known_status, contact_uri,
-							 source_ip, source_port, transport, user_agent, device_name, firmware_version,
+							(registration_key, registration_ua_class, extension, description, notes, notes_updated_at, enabled, repeat_mode, discovered, last_known_status, contact_uri,
+							 source_ip, source_port, contact_count, transport, user_agent, device_name, firmware_version,
 							 contact_expires_at, qualify_frequency, last_heartbeat_at, latency_ms,
 							 last_seen_at, last_checked_at, first_discovered_at, last_discovered_at,
 							 created_at, updated_at)
 						VALUES
-							(:extension, :description, :notes, :notes_updated_at, :enabled, :repeat_mode, :discovered, :last_known_status, :contact_uri,
-							 :source_ip, :source_port, :transport, :user_agent, :device_name, :firmware_version,
+							(:registration_key, :registration_ua_class, :extension, :description, :notes, :notes_updated_at, :enabled, :repeat_mode, :discovered, :last_known_status, :contact_uri,
+							 :source_ip, :source_port, :contact_count, :transport, :user_agent, :device_name, :firmware_version,
 							 :contact_expires_at, :qualify_frequency, :last_heartbeat_at, :latency_ms,
 							 :last_seen_at, :last_checked_at, :first_discovered_at, :last_discovered_at,
 							 :created_at, :updated_at)
@@ -149,6 +157,8 @@ class Registrationwatch implements \BMO {
 							contact_uri = VALUES(contact_uri),
 							source_ip = VALUES(source_ip),
 							source_port = VALUES(source_port),
+							registration_ua_class = VALUES(registration_ua_class),
+							contact_count = VALUES(contact_count),
 							transport = VALUES(transport),
 							user_agent = VALUES(user_agent),
 							device_name = VALUES(device_name),
@@ -163,6 +173,8 @@ class Registrationwatch implements \BMO {
 							updated_at = VALUES(updated_at)'
 					);
 					$stmt->execute([
+						':registration_key' => $registrationKey,
+						':registration_ua_class' => $uaClass,
 						':extension' => $row['extension'],
 						':description' => $row['description'] ?? null,
 						':notes' => isset($row['notes']) ? substr((string)$row['notes'], 0, 48) : '',
@@ -174,8 +186,9 @@ class Registrationwatch implements \BMO {
 						':discovered' => $row['discovered'] ?? 1,
 						':last_known_status' => $row['last_known_status'] ?? self::STATUS_UNKNOWN,
 						':contact_uri' => $row['contact_uri'] ?? null,
-						':source_ip' => $row['source_ip'] ?? null,
+						':source_ip' => $sourceIp !== '' ? $sourceIp : null,
 						':source_port' => $row['source_port'] ?? null,
+						':contact_count' => max(1, (int)($row['contact_count'] ?? 1)),
 						':transport' => $row['transport'] ?? null,
 						':user_agent' => $row['user_agent'] ?? null,
 						':device_name' => $row['device_name'] ?? null,
@@ -313,36 +326,35 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function handleSetEnabled(): array {
-		$extension = isset($_REQUEST['extension']) ? trim((string)$_REQUEST['extension']) : '';
+		$registrationId = $this->positiveRequestId('registration_id');
 		$enabled = !empty($_REQUEST['enabled']) ? 1 : 0;
 
-		if ($extension === '') {
-			return ['status' => false, 'message' => _('Missing extension.')];
+		if ($registrationId <= 0) {
+			return ['status' => false, 'message' => _('Missing watched registration.')];
 		}
 
-		$this->syncDiscoveredRegistrations();
 		$db = $this->db();
-		$stmt = $db->prepare('UPDATE registrationwatch_registrations SET enabled = :enabled, updated_at = :updated_at WHERE extension = :extension');
+		$stmt = $db->prepare('UPDATE registrationwatch_registrations SET enabled = :enabled, updated_at = :updated_at WHERE id = :id');
 		$stmt->execute([
 			':enabled' => $enabled,
 			':updated_at' => $this->now(),
-			':extension' => $extension,
+			':id' => $registrationId,
 		]);
 
 		return [
 			'status' => true,
-			'message' => $enabled ? _('Extension selected.') : _('Extension selection cleared.'),
-			'registration' => $extension,
+			'message' => $enabled ? _('Registration selected.') : _('Registration selection cleared.'),
+			'registration_id' => $registrationId,
 			'enabled' => $enabled,
 		];
 	}
 
 	private function handleSetRepeatMode(): array {
-		$extension = isset($_REQUEST['extension']) ? trim((string)$_REQUEST['extension']) : '';
+		$registrationId = $this->positiveRequestId('registration_id');
 		$rawMode = isset($_REQUEST['repeat_mode']) ? trim((string)$_REQUEST['repeat_mode']) : '';
 
-		if ($extension === '') {
-			return ['status' => false, 'message' => _('Missing extension.')];
+		if ($registrationId <= 0) {
+			return ['status' => false, 'message' => _('Missing watched registration.')];
 		}
 
 		$repeatMode = $rawMode === '' ? null : $this->normaliseRepeatMode($rawMode);
@@ -351,36 +363,36 @@ class Registrationwatch implements \BMO {
 			'UPDATE registrationwatch_registrations
 			SET repeat_mode = :repeat_mode,
 				updated_at = :updated_at
-			WHERE extension = :extension'
+			WHERE id = :id'
 		);
 		$stmt->execute([
 			':repeat_mode' => $repeatMode,
 			':updated_at' => $now,
-			':extension' => $extension,
+			':id' => $registrationId,
 		]);
 
 		$settings = $this->getAlertSettings();
 		$resolvedMode = $this->resolveRepeatMode($repeatMode, $settings);
 		if ($resolvedMode === self::REPEAT_MODE_NEVER) {
-			$stmt = $this->db()->prepare('DELETE FROM registrationwatch_alert_escalation WHERE extension = :extension');
-			$stmt->execute([':extension' => $extension]);
+			$stmt = $this->db()->prepare('DELETE FROM registrationwatch_alert_escalation WHERE registration_id = :registration_id');
+			$stmt->execute([':registration_id' => $registrationId]);
 		}
 
 		return [
 			'status' => true,
 			'message' => _('Repeat alert setting saved.'),
-			'extension' => $extension,
+			'registration_id' => $registrationId,
 			'repeat_mode' => $repeatMode,
 			'resolved_repeat_mode' => $resolvedMode,
 		];
 	}
 
 	private function handleSaveNotes(): array {
-		$extension = isset($_REQUEST['extension']) ? trim((string)$_REQUEST['extension']) : '';
+		$registrationId = $this->positiveRequestId('registration_id');
 		$notes = isset($_REQUEST['notes']) ? (string)$_REQUEST['notes'] : '';
 
-		if ($extension === '') {
-			return ['status' => false, 'message' => _('Missing extension.')];
+		if ($registrationId <= 0) {
+			return ['status' => false, 'message' => _('Missing watched registration.')];
 		}
 
 		$notes = trim(preg_replace('/\s+/', ' ', $notes));
@@ -398,19 +410,19 @@ class Registrationwatch implements \BMO {
 			SET notes = :notes,
 				notes_updated_at = :notes_updated_at,
 				updated_at = :updated_at
-			WHERE extension = :extension'
+			WHERE id = :id'
 		);
 		$stmt->execute([
 			':notes' => $notes,
 			':notes_updated_at' => $notesUpdatedAt,
 			':updated_at' => $now,
-			':extension' => $extension,
+			':id' => $registrationId,
 		]);
 
 		return [
 			'status' => true,
-			'message' => $notes === '' ? _('Extension note cleared.') : _('Extension note saved.'),
-			'extension' => $extension,
+			'message' => $notes === '' ? _('Registration note cleared.') : _('Registration note saved.'),
+			'registration_id' => $registrationId,
 			'notes' => $notes,
 			'notes_updated_at' => $notesUpdatedAt,
 		];
@@ -732,14 +744,16 @@ class Registrationwatch implements \BMO {
 		}
 		return $interval;
 	}
-	private function syncDiscoveredRegistrations(): void {
+	private function syncDiscoveredRegistrations(?array $liveContacts = null): void {
 		$now = $this->now();
-		$discovered = $this->discoverPjsipRegistrations();
+		$liveContacts = $liveContacts === null ? $this->getLiveContacts() : $liveContacts;
+		$descriptions = $this->getRegistrationDescriptions();
 		$db = $this->db();
 
-		foreach ($discovered as $registration) {
-			$stmt = $db->prepare('SELECT id FROM registrationwatch_registrations WHERE extension = :extension');
-			$stmt->execute([':extension' => $registration['extension']]);
+		foreach ($liveContacts as $registration) {
+			$extension = (string)$registration['extension'];
+			$stmt = $db->prepare('SELECT id FROM registrationwatch_registrations WHERE registration_key = :registration_key');
+			$stmt->execute([':registration_key' => $registration['registration_key']]);
 			$id = $stmt->fetchColumn();
 
 			if ($id) {
@@ -747,59 +761,71 @@ class Registrationwatch implements \BMO {
 					'UPDATE registrationwatch_registrations
 					SET description = :description,
 						discovered = 1,
+						contact_uri = :contact_uri,
+						source_ip = :source_ip,
+						source_port = :source_port,
+						registration_ua_class = :registration_ua_class,
+						transport = :transport,
+						user_agent = :user_agent,
+						device_name = :device_name,
+						firmware_version = :firmware_version,
+						contact_count = :contact_count,
+						contact_expires_at = :contact_expires_at,
+						qualify_frequency = :qualify_frequency,
 						last_discovered_at = :last_discovered_at,
 						updated_at = :updated_at
-					WHERE extension = :extension'
+					WHERE registration_key = :registration_key'
 				);
 				$update->execute([
-					':description' => $registration['description'],
+					':description' => $descriptions[$extension] ?? '',
+					':contact_uri' => $registration['contact_uri'] ?? null,
+					':source_ip' => $registration['source_ip'] ?? null,
+					':source_port' => $registration['source_port'] ?? null,
+					':registration_ua_class' => $registration['registration_ua_class'] ?? '',
+					':transport' => $registration['transport'] ?? null,
+					':user_agent' => $registration['user_agent'] ?? null,
+					':device_name' => $registration['device_name'] ?? null,
+					':firmware_version' => $registration['firmware_version'] ?? null,
+					':contact_count' => max(1, (int)($registration['contact_count'] ?? 1)),
+					':contact_expires_at' => $registration['contact_expires_at'] ?? null,
+					':qualify_frequency' => $registration['qualify_frequency'] ?? null,
 					':last_discovered_at' => $now,
 					':updated_at' => $now,
-					':extension' => $registration['extension'],
+					':registration_key' => $registration['registration_key'],
 				]);
 				continue;
 			}
 
 			$insert = $db->prepare(
 				'INSERT INTO registrationwatch_registrations
-					(extension, description, enabled, discovered, last_known_status, created_at, updated_at, first_discovered_at, last_discovered_at)
+					(registration_key, extension, description, enabled, discovered, last_known_status, contact_uri,
+					 source_ip, source_port, registration_ua_class, transport, user_agent, device_name, firmware_version,
+					 contact_count, contact_expires_at, qualify_frequency, created_at, updated_at, first_discovered_at, last_discovered_at)
 				VALUES
-					(:extension, :description, 0, 1, :last_known_status, :created_at, :updated_at, :first_discovered_at, :last_discovered_at)'
+					(:registration_key, :extension, :description, 0, 1, :last_known_status, :contact_uri,
+					 :source_ip, :source_port, :registration_ua_class, :transport, :user_agent, :device_name, :firmware_version,
+					 :contact_count, :contact_expires_at, :qualify_frequency, :created_at, :updated_at, :first_discovered_at, :last_discovered_at)'
 			);
 			$insert->execute([
-				':extension' => $registration['extension'],
-				':description' => $registration['description'],
+				':registration_key' => $registration['registration_key'],
+				':extension' => $extension,
+				':description' => $descriptions[$extension] ?? '',
 				':last_known_status' => self::STATUS_UNKNOWN,
+				':contact_uri' => $registration['contact_uri'] ?? null,
+				':source_ip' => $registration['source_ip'] ?? null,
+				':source_port' => $registration['source_port'] ?? null,
+				':registration_ua_class' => $registration['registration_ua_class'] ?? '',
+				':transport' => $registration['transport'] ?? null,
+				':user_agent' => $registration['user_agent'] ?? null,
+				':device_name' => $registration['device_name'] ?? null,
+				':firmware_version' => $registration['firmware_version'] ?? null,
+				':contact_count' => max(1, (int)($registration['contact_count'] ?? 1)),
+				':contact_expires_at' => $registration['contact_expires_at'] ?? null,
+				':qualify_frequency' => $registration['qualify_frequency'] ?? null,
 				':created_at' => $now,
 				':updated_at' => $now,
 				':first_discovered_at' => $now,
 				':last_discovered_at' => $now,
-			]);
-		}
-
-		$extensions = array_map(function ($registration) {
-			return $registration['extension'];
-		}, $discovered);
-
-		$existing = $this->getStoredRegistrations();
-		foreach ($existing as $row) {
-			if (in_array($row['extension'], $extensions, true)) {
-				continue;
-			}
-
-			$stmt = $db->prepare(
-				'UPDATE registrationwatch_registrations
-				SET discovered = 0,
-					contact_uri = NULL,
-					latency_ms = NULL,
-					last_checked_at = :last_checked_at,
-					updated_at = :updated_at
-				WHERE extension = :extension'
-			);
-			$stmt->execute([
-				':last_checked_at' => $now,
-				':updated_at' => $now,
-				':extension' => $row['extension'],
 			]);
 		}
 	}
@@ -892,10 +918,8 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function reconcileCurrentStatus(): void {
-		$this->syncDiscoveredRegistrations();
-
 		$contacts = $this->getLiveContacts();
-		$registrarDetails = $this->getRegistrarContactDetails();
+		$this->syncDiscoveredRegistrations($contacts);
 		$now = $this->now();
 		$db = $this->db();
 		$registrations = $this->getStoredRegistrations();
@@ -908,7 +932,9 @@ class Registrationwatch implements \BMO {
 			$previousStatus = $this->normaliseState($registration['last_known_status'] ?? self::STATUS_UNKNOWN);
 			$previousContactUri = $registration['contact_uri'] ?? null;
 			$previousHadContact = $this->hadRegisteredState($previousStatus) || (string)($registration['contact_uri'] ?? '') !== '';
-			$contact = $contacts[$registration['extension']] ?? null;
+			$registrationId = (int)$registration['id'];
+			$registrationKey = (string)$registration['registration_key'];
+			$contact = $contacts[$registrationKey] ?? null;
 			$status = self::STATUS_NOT_REGISTERED;
 			$contactUri = null;
 			$latency = null;
@@ -919,6 +945,8 @@ class Registrationwatch implements \BMO {
 			$firmwareVersion = $registration['firmware_version'] ?? null;
 			$contactExpiresAt = $registration['contact_expires_at'] ?? null;
 			$qualifyFrequency = $registration['qualify_frequency'] ?? null;
+			$contactCount = max(1, (int)($registration['contact_count'] ?? 1));
+			$registrationUaClass = $registration['registration_ua_class'] ?? '';
 			$lastSeen = $registration['last_seen_at'] ?: null;
 
 			if ($contact !== null) {
@@ -926,21 +954,17 @@ class Registrationwatch implements \BMO {
 				$contactUri = $contact['contact_uri'];
 				$latency = $contact['latency_ms'];
 				$sourceIp = $contact['source_ip'] ?? null;
+				$sourcePort = $contact['source_port'] ?? null;
+				$userAgent = $contact['user_agent'] ?? $userAgent;
+				$deviceName = $contact['device_name'] ?? $deviceName;
+				$firmwareVersion = $contact['firmware_version'] ?? $firmwareVersion;
+				$contactExpiresAt = $contact['contact_expires_at'] ?? $contactExpiresAt;
+				$qualifyFrequency = $contact['qualify_frequency'] ?? $qualifyFrequency;
+				$contactCount = max(1, (int)($contact['contact_count'] ?? 1));
+				$registrationUaClass = $contact['registration_ua_class'] ?? $registrationUaClass;
 				if ($contactUri !== '') {
 					$lastSeen = $now;
 				}
-			}
-
-			$registrar = $registrarDetails[(string)$registration['extension']] ?? [];
-			if ($registrar) {
-				$contactUri = $registrar['contact_uri'] ?? $contactUri;
-				$sourceIp = $registrar['source_ip'] ?? $sourceIp;
-				$sourcePort = $registrar['source_port'] ?? $sourcePort;
-				$userAgent = $registrar['user_agent'] ?? $userAgent;
-				$deviceName = $registrar['device_name'] ?? $deviceName;
-				$firmwareVersion = $registrar['firmware_version'] ?? $firmwareVersion;
-				$contactExpiresAt = $registrar['contact_expires_at'] ?? $contactExpiresAt;
-				$qualifyFrequency = $registrar['qualify_frequency'] ?? $qualifyFrequency;
 			}
 
 			if ($previousStatus !== $status) {
@@ -950,6 +974,8 @@ class Registrationwatch implements \BMO {
 				}
 
 				$this->insertStatusHistory(
+					$registrationId,
+					$registrationKey,
 					(string)$registration['extension'],
 					$previousStatus,
 					$status,
@@ -967,15 +993,17 @@ class Registrationwatch implements \BMO {
 					latency_ms = :latency_ms,
 					source_ip = :source_ip,
 					source_port = :source_port,
+					registration_ua_class = :registration_ua_class,
 					user_agent = :user_agent,
 					device_name = :device_name,
 					firmware_version = :firmware_version,
+					contact_count = :contact_count,
 					contact_expires_at = :contact_expires_at,
 					qualify_frequency = :qualify_frequency,
 					last_seen_at = :last_seen_at,
 					last_checked_at = :last_checked_at,
 					updated_at = :updated_at
-				WHERE extension = :extension'
+				WHERE id = :id'
 			);
 			$stmt->execute([
 				':last_known_status' => $status,
@@ -983,15 +1011,17 @@ class Registrationwatch implements \BMO {
 				':latency_ms' => $latency,
 				':source_ip' => $sourceIp,
 				':source_port' => $sourcePort,
+				':registration_ua_class' => $registrationUaClass,
 				':user_agent' => $userAgent,
 				':device_name' => $deviceName,
 				':firmware_version' => $firmwareVersion,
+				':contact_count' => $contactCount,
 				':contact_expires_at' => $contactExpiresAt,
 				':qualify_frequency' => $qualifyFrequency,
 				':last_seen_at' => $lastSeen,
 				':last_checked_at' => $now,
 				':updated_at' => $now,
-				':extension' => $registration['extension'],
+				':id' => $registrationId,
 			]);
 		}
 
@@ -1005,6 +1035,9 @@ class Registrationwatch implements \BMO {
 		}
 
 		$contacts = [];
+		$pending = [];
+		$registrarDetails = $this->getRegistrarContactDetails();
+		$existingIdentityClasses = $this->getStoredRegistrationIdentityClasses();
 		$lineCount = 0;
 		$parsedCount = 0;
 		$failureCount = 0;
@@ -1029,9 +1062,22 @@ class Registrationwatch implements \BMO {
 			}
 
 			$parsedCount++;
-			$existing = $contacts[$parsed['extension']] ?? null;
-			if ($existing === null || $this->statusRank($parsed['status']) > $this->statusRank($existing['status'])) {
-				$contacts[$parsed['extension']] = $parsed;
+			$parsed = $this->enrichLiveContactFromRegistrar($parsed, $registrarDetails);
+			$identityGroup = $this->registrationIdentityGroupKey($parsed['extension'], $parsed['source_ip']);
+			$pending[$identityGroup][] = $parsed;
+		}
+
+		foreach ($pending as $identityGroup => $items) {
+			foreach ($this->resolveLiveContactIdentityGroup($items, $existingIdentityClasses[$identityGroup] ?? []) as $parsed) {
+				$key = $parsed['registration_key'];
+				$existing = $contacts[$key] ?? null;
+				if ($existing === null) {
+					$contacts[$key] = $parsed;
+					continue;
+				}
+
+				$parsed['contact_count'] = ((int)($existing['contact_count'] ?? 1)) + 1;
+				$contacts[$key] = $this->preferredLiveContact($existing, $parsed);
 			}
 		}
 
@@ -1041,6 +1087,156 @@ class Registrationwatch implements \BMO {
 		}
 
 		return $contacts;
+	}
+
+	private function resolveLiveContactIdentityGroup(array $items, array $existingState): array {
+		$usableClasses = [];
+		foreach ($items as $item) {
+			$uaClass = $this->normaliseUserAgentClass($item['user_agent'] ?? null);
+			if ($uaClass !== '') {
+				$usableClasses[$uaClass] = true;
+			}
+		}
+
+		ksort($usableClasses, SORT_STRING);
+		$splitClasses = [];
+		$existingClasses = $existingState['classes'] ?? [];
+		$existingShared = $existingState['shared'] ?? [];
+		$existingNonShared = array_values(array_filter(array_map('strval', $existingClasses), function ($uaClass) {
+			return $uaClass !== '';
+		}));
+		if (count($usableClasses) > 1) {
+			$splitClasses = array_fill_keys(array_keys($usableClasses), true);
+		} elseif (count($usableClasses) === 1 && $existingNonShared) {
+			$splitClasses = array_fill_keys(array_unique(array_merge(array_keys($usableClasses), $existingNonShared)), true);
+		}
+
+		$sharedAnchorIndex = null;
+		if ($splitClasses && $existingShared) {
+			$sharedAnchorIndex = $this->sharedRegistrationAnchorIndex($items, $existingShared);
+		}
+
+		foreach ($items as $index => $item) {
+			$uaClass = $this->normaliseUserAgentClass($item['user_agent'] ?? null);
+			$resolvedClass = '';
+			if ($sharedAnchorIndex !== $index && $uaClass !== '' && isset($splitClasses[$uaClass])) {
+				$resolvedClass = $uaClass;
+			}
+			$items[$index]['registration_ua_class'] = $resolvedClass;
+			$items[$index]['registration_key'] = $this->registrationKey($item['extension'], $item['source_ip'], $resolvedClass);
+		}
+
+		return $items;
+	}
+
+	private function sharedRegistrationAnchorIndex(array $items, array $existingShared): ?int {
+		foreach ($existingShared as $existing) {
+			foreach ($items as $index => $item) {
+				if (!empty($existing['contact_uri']) && (string)$existing['contact_uri'] === (string)($item['contact_uri'] ?? '')) {
+					return $index;
+				}
+			}
+		}
+
+		foreach ($existingShared as $existing) {
+			$existingUaClass = $this->normaliseUserAgentClass($existing['user_agent'] ?? null);
+			if ($existingUaClass === '') {
+				continue;
+			}
+			foreach ($items as $index => $item) {
+				if ($existingUaClass === $this->normaliseUserAgentClass($item['user_agent'] ?? null)) {
+					return $index;
+				}
+			}
+		}
+
+		$ranked = [];
+		foreach ($items as $index => $item) {
+			$ranked[] = [
+				'index' => $index,
+				'ua' => $this->normaliseUserAgentClass($item['user_agent'] ?? null),
+				'contact_uri' => (string)($item['contact_uri'] ?? ''),
+			];
+		}
+		usort($ranked, function ($a, $b) {
+			$uaCompare = strcmp($a['ua'], $b['ua']);
+			if ($uaCompare !== 0) {
+				return $uaCompare;
+			}
+			return strcmp($a['contact_uri'], $b['contact_uri']);
+		});
+
+		return isset($ranked[0]) ? (int)$ranked[0]['index'] : null;
+	}
+
+	private function enrichLiveContactFromRegistrar(array $contact, array $registrarDetails): array {
+		$candidates = [];
+		$extension = (string)($contact['extension'] ?? '');
+
+		foreach ($registrarDetails as $detail) {
+			if (($detail['extension'] ?? '') !== $extension) {
+				continue;
+			}
+			if (!empty($detail['contact_uri']) && (string)$detail['contact_uri'] === (string)($contact['contact_uri'] ?? '')) {
+				array_unshift($candidates, $detail);
+				break;
+			}
+			if (!empty($detail['source_ip']) && $this->normaliseSourceIp($detail['source_ip']) === (string)($contact['source_ip'] ?? '')) {
+				$candidates[] = $detail;
+			}
+		}
+
+		foreach ($candidates as $detail) {
+			if (!is_array($detail)) {
+				continue;
+			}
+			foreach (['user_agent', 'device_name', 'firmware_version', 'contact_expires_at', 'qualify_frequency'] as $field) {
+				if (($contact[$field] ?? null) === null && ($detail[$field] ?? null) !== null && $detail[$field] !== '') {
+					$contact[$field] = $detail[$field];
+				}
+			}
+			if (($detail['source_port'] ?? null) !== null) {
+				$contact['source_port'] = $detail['source_port'];
+			}
+		}
+
+		return $contact;
+	}
+
+	private function getStoredRegistrationIdentityClasses(): array {
+		if (!$this->tableExists('registrationwatch_registrations')) {
+			return [];
+		}
+
+		try {
+			$stmt = $this->db()->query(
+				"SELECT extension, source_ip, registration_ua_class, contact_uri, user_agent
+				FROM registrationwatch_registrations
+				WHERE source_ip IS NOT NULL AND source_ip <> ''"
+			);
+		} catch (\Throwable $e) {
+			return [];
+		}
+
+		$groups = [];
+		foreach (($stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : []) as $row) {
+			$sourceIp = $this->normaliseSourceIp($row['source_ip'] ?? '');
+			$extension = $this->normaliseRegistrationExtension((string)($row['extension'] ?? ''));
+			if ($extension === '' || $sourceIp === '') {
+				continue;
+			}
+			$key = $this->registrationIdentityGroupKey($extension, $sourceIp);
+			$uaClass = (string)($row['registration_ua_class'] ?? '');
+			$groups[$key]['classes'][] = $uaClass;
+			if ($uaClass === '') {
+				$groups[$key]['shared'][] = [
+					'contact_uri' => $row['contact_uri'] ?? null,
+					'user_agent' => $row['user_agent'] ?? null,
+				];
+			}
+		}
+
+		return $groups;
 	}
 
 	/**
@@ -1060,7 +1256,7 @@ class Registrationwatch implements \BMO {
 		}
 
 		[$extension, $contactUri] = explode('/', $target, 2);
-		$extension = trim($extension);
+		$extension = $this->normaliseRegistrationExtension($extension);
 		$contactUri = trim($contactUri);
 		if ($extension === '') {
 			return null;
@@ -1080,17 +1276,92 @@ class Registrationwatch implements \BMO {
 
 		$contactAddress = $this->parseContactUriAddress($contactUri);
 		$contactHost = $contactAddress['host'];
-		$sourceIp = $contactHost !== null && filter_var($contactHost, FILTER_VALIDATE_IP) ? $contactHost : null;
+		$sourceIp = $this->normaliseSourceIp($contactHost);
+		if ($sourceIp === '') {
+			return null;
+		}
 
 		return [
+			'registration_key' => $this->registrationKey($extension, $sourceIp),
+			'registration_ua_class' => '',
 			'extension' => $extension,
 			'contact_uri' => $contactUri,
 			'status' => $this->mapAsteriskStatus($rawStatus),
 			'latency_ms' => $latency,
 			'source_ip' => $sourceIp,
+			'source_port' => $contactAddress['port'],
+			'contact_count' => 1,
 			'transport' => null,  // Not available from "pjsip show contacts"; requires future AMI/log ingestion
-			'user_agent' => null, // Not available from "pjsip show contacts"; requires future AMI/log ingestion
+			'user_agent' => null, // Enriched from registrar/contact where available.
+			'device_name' => null,
+			'firmware_version' => null,
+			'contact_expires_at' => null,
+			'qualify_frequency' => null,
 		];
+	}
+
+	private function normaliseRegistrationExtension(string $extension): string {
+		return strtolower(trim($extension));
+	}
+
+	private function normaliseSourceIp($sourceIp): string {
+		$sourceIp = trim((string)$sourceIp, " \t\n\r\0\x0B[]");
+		if ($sourceIp === '' || !filter_var($sourceIp, FILTER_VALIDATE_IP)) {
+			return '';
+		}
+
+		$packed = @inet_pton($sourceIp);
+		if ($packed === false) {
+			return strtolower($sourceIp);
+		}
+
+		$normalised = @inet_ntop($packed);
+		return $normalised === false ? strtolower($sourceIp) : strtolower($normalised);
+	}
+
+	private function registrationKey(string $extension, string $sourceIp, string $uaClass = ''): string {
+		$basis = $this->normaliseRegistrationExtension($extension) . "\0" . $this->normaliseSourceIp($sourceIp);
+		$uaClass = $this->normaliseUserAgentClass($uaClass);
+		if ($uaClass !== '') {
+			$basis .= "\0" . $uaClass;
+		}
+
+		return hash('sha256', $basis);
+	}
+
+	private function registrationIdentityGroupKey(string $extension, string $sourceIp): string {
+		return $this->normaliseRegistrationExtension($extension) . "\0" . $this->normaliseSourceIp($sourceIp);
+	}
+
+	private function normaliseUserAgentClass($userAgent): string {
+		$userAgent = strtolower(trim((string)$userAgent));
+		if ($userAgent === '') {
+			return '';
+		}
+
+		$userAgent = preg_replace('/\s+/', ' ', $userAgent);
+		return $userAgent === null ? '' : $userAgent;
+	}
+
+	private function preferredLiveContact(array $existing, array $candidate): array {
+		$existingRank = $this->statusRank((string)($existing['status'] ?? ''));
+		$candidateRank = $this->statusRank((string)($candidate['status'] ?? ''));
+		if ($candidateRank > $existingRank) {
+			return $candidate;
+		}
+		if ($candidateRank < $existingRank) {
+			$existing['contact_count'] = $candidate['contact_count'] ?? $existing['contact_count'] ?? 1;
+			return $existing;
+		}
+
+		$existingUri = (string)($existing['contact_uri'] ?? '');
+		$candidateUri = (string)($candidate['contact_uri'] ?? '');
+		if (strcmp($candidateUri, $existingUri) >= 0) {
+			return $candidate;
+		}
+
+		$existing['contact_count'] = $candidate['contact_count'] ?? $existing['contact_count'] ?? 1;
+		return $existing;
 	}
 
 	private function parseContactUriAddress(?string $contactUri): array {
@@ -1394,14 +1665,16 @@ class Registrationwatch implements \BMO {
 		return $groups;
 	}
 
-	private function insertStatusHistory(string $extension, ?string $fromState, string $toState, string $reason, ?string $contactUri, ?float $latency, string $createdAt): int {
+	private function insertStatusHistory(int $registrationId, string $registrationKey, string $extension, ?string $fromState, string $toState, string $reason, ?string $contactUri, ?float $latency, string $createdAt): int {
 		$stmt = $this->db()->prepare(
 			'INSERT INTO registrationwatch_status_history
-				(extension, from_state, to_state, source, reason, contact_uri, latency_ms, created_at)
+				(registration_id, registration_key, extension, from_state, to_state, source, reason, contact_uri, latency_ms, created_at)
 			VALUES
-				(:extension, :from_state, :to_state, :source, :reason, :contact_uri, :latency_ms, :created_at)'
+				(:registration_id, :registration_key, :extension, :from_state, :to_state, :source, :reason, :contact_uri, :latency_ms, :created_at)'
 		);
 		$stmt->execute([
+			':registration_id' => $registrationId,
+			':registration_key' => $registrationKey,
 			':extension' => $extension,
 			':from_state' => $fromState !== '' ? $fromState : null,
 			':to_state' => $toState,
@@ -1430,11 +1703,11 @@ class Registrationwatch implements \BMO {
 			// settings changes, while legitimate debounce delays still work.
 			$staleCutoff = date('Y-m-d H:i:s', strtotime($now) - ($debounceSeconds + self::ALERT_STALE_TRANSITION_MAX_SECONDS));
 			$stmt = $this->db()->prepare(
-				'SELECT h.id, h.extension, h.from_state, h.to_state, h.source, h.reason, h.contact_uri, h.latency_ms, h.created_at,
-					e.repeat_mode
+				'SELECT h.id, h.registration_id, h.registration_key, h.extension, h.from_state, h.to_state, h.source, h.reason,
+					h.contact_uri, h.latency_ms, h.created_at, e.repeat_mode
 				FROM registrationwatch_status_history h
 				JOIN registrationwatch_registrations e
-					ON e.extension = h.extension
+					ON e.id = h.registration_id
 				WHERE h.source = :source
 					AND h.created_at <= :cutoff
 					AND h.created_at >= :stale_cutoff
@@ -1460,8 +1733,8 @@ class Registrationwatch implements \BMO {
 
 				$repeatMode = $this->resolveRepeatMode($transition['repeat_mode'] ?? null, $settings);
 				if ($this->isEscalatingAlertType($alertType)) {
-					$existingEscalation = $this->getActiveEscalationForExtension((string)$transition['extension']);
-					$this->deleteOtherEscalations((string)$transition['extension'], $alertType);
+					$existingEscalation = $this->getActiveEscalationForRegistration((int)$transition['registration_id']);
+					$this->deleteOtherEscalations((int)$transition['registration_id'], $alertType);
 					$this->upsertEscalationForTransition($transition, $alertType, $repeatMode, $now, $existingEscalation);
 				}
 
@@ -1476,10 +1749,13 @@ class Registrationwatch implements \BMO {
 
 					$email = $this->buildAlertEmail($transition, $alertType);
 					$reserved = $this->reserveAlertHistory([
+						'registration_id' => (int)$transition['registration_id'],
+						'registration_key' => $transition['registration_key'],
 						'extension' => $transition['extension'],
 						'history_id' => (int)$transition['id'],
 						'alert_type' => $alertType,
 						'status' => $transition['to_state'],
+						'contact_uri' => $transition['contact_uri'] ?? null,
 						'recipient' => $recipient,
 						'subject' => $email['subject'],
 						'message' => $email['message'],
@@ -1492,11 +1768,14 @@ class Registrationwatch implements \BMO {
 					}
 
 					$collectedAlerts[] = [
+						'registration_id' => (int)$transition['registration_id'],
+						'registration_key' => (string)$transition['registration_key'],
 						'extension' => (string)$transition['extension'],
 						'history_id' => (int)$transition['id'],
 						'reminder_n' => 0,
 						'alert_type' => $alertType,
 						'status' => (string)$transition['to_state'],
+						'contact_uri' => $transition['contact_uri'] ?? null,
 						'recipient' => $recipient,
 						'subject' => $email['subject'],
 						'message' => $email['message'],
@@ -1585,7 +1864,7 @@ class Registrationwatch implements \BMO {
 
 		$placeholders = [];
 		$params = [
-			':extension' => (string)$transition['extension'],
+			':registration_id' => (int)$transition['registration_id'],
 		];
 
 		foreach ($types as $index => $type) {
@@ -1596,7 +1875,7 @@ class Registrationwatch implements \BMO {
 
 		$stmt = $this->db()->prepare(
 			'DELETE FROM registrationwatch_alert_escalation
-			WHERE extension = :extension
+			WHERE registration_id = :registration_id
 				AND alert_type IN (' . implode(', ', $placeholders) . ')'
 		);
 		$stmt->execute($params);
@@ -1611,25 +1890,27 @@ class Registrationwatch implements \BMO {
 		return $this->normaliseRepeatMode($settings['repeat_mode'] ?? self::REPEAT_MODE_NEVER);
 	}
 
-	private function getActiveEscalationForExtension(string $extension): array {
+	private function getActiveEscalationForRegistration(int $registrationId): array {
 		$stmt = $this->db()->prepare(
-			'SELECT id, extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode
+			'SELECT id, registration_id, registration_key, extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode
 			FROM registrationwatch_alert_escalation
-			WHERE extension = :extension
+			WHERE registration_id = :registration_id
 			ORDER BY active_since ASC, id ASC
 			LIMIT 1'
 		);
-		$stmt->execute([':extension' => $extension]);
+		$stmt->execute([':registration_id' => $registrationId]);
 		$row = $stmt->fetch(\PDO::FETCH_ASSOC);
 
 		return is_array($row) ? $row : [];
 	}
 
 	private function upsertEscalationForTransition(array $transition, string $alertType, string $repeatMode, string $now, array $existingEscalation = []): void {
+		$registrationId = (int)$transition['registration_id'];
+		$registrationKey = (string)$transition['registration_key'];
 		$extension = (string)$transition['extension'];
 		$repeatMode = $this->normaliseRepeatMode($repeatMode);
 		if ($repeatMode === self::REPEAT_MODE_NEVER) {
-			$this->deleteEscalationsForExtension($extension);
+			$this->deleteEscalationsForRegistration($registrationId);
 			return;
 		}
 
@@ -1640,16 +1921,18 @@ class Registrationwatch implements \BMO {
 			? (string)$existingEscalation['next_due_at']
 			: $this->nextRepeatDueAt($now, $repeatMode, $alertCount);
 		if ($nextDueAt === null) {
-			$this->deleteEscalationsForExtension($extension);
+			$this->deleteEscalationsForRegistration($registrationId);
 			return;
 		}
 
 		$stmt = $this->db()->prepare(
 			'INSERT INTO registrationwatch_alert_escalation
-				(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode, created_at, updated_at)
+				(registration_id, registration_key, extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode, created_at, updated_at)
 			VALUES
-				(:extension, :history_id, :alert_type, :active_since, :last_alert_at, :alert_count, :next_due_at, :repeat_mode, :created_at, :updated_at)
+				(:registration_id, :registration_key, :extension, :history_id, :alert_type, :active_since, :last_alert_at, :alert_count, :next_due_at, :repeat_mode, :created_at, :updated_at)
 			ON DUPLICATE KEY UPDATE
+				registration_key = VALUES(registration_key),
+				extension = VALUES(extension),
 				history_id = VALUES(history_id),
 				active_since = VALUES(active_since),
 				last_alert_at = VALUES(last_alert_at),
@@ -1659,6 +1942,8 @@ class Registrationwatch implements \BMO {
 				updated_at = VALUES(updated_at)'
 		);
 		$stmt->execute([
+			':registration_id' => $registrationId,
+			':registration_key' => $registrationKey,
 			':extension' => $extension,
 			':history_id' => (int)$transition['id'],
 			':alert_type' => $alertType,
@@ -1672,34 +1957,34 @@ class Registrationwatch implements \BMO {
 		]);
 	}
 
-	private function deleteEscalationsForExtension(string $extension): void {
+	private function deleteEscalationsForRegistration(int $registrationId): void {
 		$stmt = $this->db()->prepare(
 			'DELETE FROM registrationwatch_alert_escalation
-			WHERE extension = :extension'
+			WHERE registration_id = :registration_id'
 		);
-		$stmt->execute([':extension' => $extension]);
+		$stmt->execute([':registration_id' => $registrationId]);
 	}
 
-	private function deleteEscalation(string $extension, string $alertType): void {
+	private function deleteEscalation(int $registrationId, string $alertType): void {
 		$stmt = $this->db()->prepare(
 			'DELETE FROM registrationwatch_alert_escalation
-			WHERE extension = :extension
+			WHERE registration_id = :registration_id
 				AND alert_type = :alert_type'
 		);
 		$stmt->execute([
-			':extension' => $extension,
+			':registration_id' => $registrationId,
 			':alert_type' => $alertType,
 		]);
 	}
 
-	private function deleteOtherEscalations(string $extension, string $activeAlertType): void {
+	private function deleteOtherEscalations(int $registrationId, string $activeAlertType): void {
 		$stmt = $this->db()->prepare(
 			'DELETE FROM registrationwatch_alert_escalation
-			WHERE extension = :extension
+			WHERE registration_id = :registration_id
 				AND alert_type <> :alert_type'
 		);
 		$stmt->execute([
-			':extension' => $extension,
+			':registration_id' => $registrationId,
 			':alert_type' => $activeAlertType,
 		]);
 	}
@@ -1718,12 +2003,12 @@ class Registrationwatch implements \BMO {
 		}
 
 		$stmt = $this->db()->prepare(
-			'SELECT a.id, a.extension, a.history_id, a.alert_type, a.active_since, a.last_alert_at,
+			'SELECT a.id, a.registration_id, a.registration_key, a.extension, a.history_id, a.alert_type, a.active_since, a.last_alert_at,
 				a.alert_count, a.next_due_at, a.repeat_mode,
 				r.last_known_status, r.contact_uri, r.latency_ms, r.enabled
 			FROM registrationwatch_alert_escalation a
 			JOIN registrationwatch_registrations r
-				ON r.extension = a.extension
+				ON r.id = a.registration_id
 			WHERE a.next_due_at <= :now
 				AND r.enabled = 1
 			ORDER BY a.next_due_at ASC, a.id ASC
@@ -1734,7 +2019,7 @@ class Registrationwatch implements \BMO {
 		foreach ($stmt->fetchAll(\PDO::FETCH_ASSOC) as $row) {
 			$currentStatus = $this->currentLiveStatusForReminder($row, $liveContacts);
 			if (!$this->isReminderStillAlertable((string)$row['alert_type'], $currentStatus)) {
-				$this->deleteEscalation((string)$row['extension'], (string)$row['alert_type']);
+				$this->deleteEscalation((int)$row['registration_id'], (string)$row['alert_type']);
 				continue;
 			}
 
@@ -1745,11 +2030,14 @@ class Registrationwatch implements \BMO {
 
 			foreach ($recipients as $recipient) {
 				$reserved = $this->reserveAlertHistory([
+					'registration_id' => (int)$row['registration_id'],
+					'registration_key' => $row['registration_key'],
 					'extension' => $row['extension'],
 					'history_id' => (int)$row['history_id'],
 					'reminder_n' => $reminderN,
 					'alert_type' => $row['alert_type'],
 					'status' => $currentStatus,
+					'contact_uri' => $row['contact_uri'] ?? null,
 					'recipient' => $recipient,
 					'subject' => $email['subject'],
 					'message' => $email['message'],
@@ -1763,11 +2051,14 @@ class Registrationwatch implements \BMO {
 
 				$reservedAny = true;
 				$result['alerts'][] = [
+					'registration_id' => (int)$row['registration_id'],
+					'registration_key' => (string)$row['registration_key'],
 					'extension' => (string)$row['extension'],
 					'history_id' => (int)$row['history_id'],
 					'reminder_n' => $reminderN,
 					'alert_type' => (string)$row['alert_type'],
 					'status' => $currentStatus,
+					'contact_uri' => $row['contact_uri'] ?? null,
 					'recipient' => $recipient,
 					'subject' => $email['subject'],
 					'message' => $email['message'],
@@ -1931,9 +2222,9 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function currentLiveStatusForReminder(array $row, array $liveContacts): string {
-		$extension = (string)$row['extension'];
-		if (isset($liveContacts[$extension])) {
-			return $this->normaliseState($liveContacts[$extension]['status'] ?? self::STATUS_UNKNOWN);
+		$registrationKey = (string)($row['registration_key'] ?? '');
+		if ($registrationKey !== '' && isset($liveContacts[$registrationKey])) {
+			return $this->normaliseState($liveContacts[$registrationKey]['status'] ?? self::STATUS_UNKNOWN);
 		}
 
 		return self::STATUS_NOT_REGISTERED;
@@ -1954,6 +2245,8 @@ class Registrationwatch implements \BMO {
 	private function buildReminderTransition(array $row, string $currentStatus, string $now): array {
 		return [
 			'id' => (int)$row['history_id'],
+			'registration_id' => (int)$row['registration_id'],
+			'registration_key' => (string)$row['registration_key'],
 			'extension' => (string)$row['extension'],
 			'from_state' => null,
 			'to_state' => $currentStatus,
@@ -1969,7 +2262,7 @@ class Registrationwatch implements \BMO {
 		$repeatMode = $this->normaliseRepeatMode($row['repeat_mode'] ?? self::REPEAT_MODE_NEVER);
 		$nextDueAt = $this->nextRepeatDueAt($now, $repeatMode, $reminderN);
 		if ($nextDueAt === null) {
-			$this->deleteEscalation((string)$row['extension'], (string)$row['alert_type']);
+			$this->deleteEscalation((int)$row['registration_id'], (string)$row['alert_type']);
 			return;
 		}
 
@@ -2114,9 +2407,10 @@ class Registrationwatch implements \BMO {
 				$expiresAt = date('Y-m-d H:i:s', (int)$payload['expiration_time']);
 			}
 
-			$details[$registration] = [
+			$details[] = [
+				'extension' => $this->normaliseRegistrationExtension($registration),
 				'contact_uri' => isset($payload['uri']) && $payload['uri'] !== '' ? (string)$payload['uri'] : null,
-				'source_ip' => isset($payload['via_addr']) && $payload['via_addr'] !== '' ? (string)$payload['via_addr'] : null,
+				'source_ip' => isset($payload['via_addr']) && $payload['via_addr'] !== '' ? $this->normaliseSourceIp($payload['via_addr']) : null,
 				'source_port' => isset($payload['via_port']) && is_numeric($payload['via_port']) ? (int)$payload['via_port'] : null,
 				'user_agent' => $userAgent !== '' ? $userAgent : null,
 				'device_name' => $parsed['device_name'],
@@ -2133,12 +2427,13 @@ class Registrationwatch implements \BMO {
 
 	private function getStoredRegistrations(): array {
 		$stmt = $this->db()->query(
-			'SELECT extension, description, notes, notes_updated_at, enabled, repeat_mode, discovered, last_known_status, contact_uri,
-				source_ip, source_port, transport, user_agent, device_name, firmware_version,
+			'SELECT id, registration_key, registration_ua_class, extension, description, notes, notes_updated_at,
+				enabled, repeat_mode, discovered, last_known_status, contact_uri,
+				source_ip, source_port, contact_count, transport, user_agent, device_name, firmware_version,
 				contact_expires_at, qualify_frequency, last_heartbeat_at, latency_ms, last_seen_at,
 				last_checked_at, first_discovered_at, last_discovered_at
 			FROM registrationwatch_registrations
-			ORDER BY extension'
+			ORDER BY extension, source_ip, id'
 		);
 
 		$rows = $stmt ? $stmt->fetchAll(\PDO::FETCH_ASSOC) : [];
@@ -2156,6 +2451,10 @@ class Registrationwatch implements \BMO {
 				continue;
 			}
 			$rows[] = [
+				'id' => (int)$registration['id'],
+				'registration_id' => (int)$registration['id'],
+				'registration_key' => $registration['registration_key'],
+				'registration_ua_class' => $registration['registration_ua_class'] ?? '',
 				'extension' => $registration['extension'],
 				'description' => $registration['description'],
 				'enabled' => (int)$registration['enabled'],
@@ -2164,6 +2463,7 @@ class Registrationwatch implements \BMO {
 				'contact_uri' => $registration['contact_uri'],
 				'source_ip' => $registration['source_ip'],
 				'source_port' => $registration['source_port'] ?? null,
+				'contact_count' => isset($registration['contact_count']) ? (int)$registration['contact_count'] : 1,
 				'device_ip' => $registration['device_ip'] ?? null,
 				'device_port' => $registration['device_port'] ?? null,
 				'network_ip' => $registration['network_ip'] ?? null,
@@ -2191,7 +2491,7 @@ class Registrationwatch implements \BMO {
 
 	private function getStatusHistory(): array {
 		$stmt = $this->db()->query(
-			'SELECT id, extension, from_state, to_state, source, reason, contact_uri, latency_ms, created_at
+			'SELECT id, registration_id, registration_key, extension, from_state, to_state, source, reason, contact_uri, latency_ms, created_at
 			FROM registrationwatch_status_history
 			ORDER BY created_at DESC, id DESC
 			LIMIT 25'
@@ -2209,7 +2509,7 @@ class Registrationwatch implements \BMO {
 
 	private function getAlertHistory(): array {
 		$stmt = $this->db()->query(
-			'SELECT id, extension, history_id, alert_type, status, recipient, subject, sent_at, result, error
+			'SELECT id, registration_id, registration_key, extension, contact_uri, history_id, alert_type, status, recipient, subject, sent_at, result, error
 			FROM registrationwatch_alert_history
 			ORDER BY sent_at DESC, id DESC
 			LIMIT 25'
@@ -2463,16 +2763,16 @@ class Registrationwatch implements \BMO {
 		return array_values($recipients);
 	}
 
-	private function getRegistrationDetails(string $extension): array {
+	private function getRegistrationDetailsById(int $registrationId): array {
 		$stmt = $this->db()->prepare(
-			'SELECT extension, description, last_known_status, contact_uri, source_ip, source_port,
+			'SELECT id, registration_key, extension, description, last_known_status, contact_uri, source_ip, source_port,
 				user_agent, device_name, firmware_version, contact_expires_at,
 				qualify_frequency, last_checked_at
 			FROM registrationwatch_registrations
-			WHERE extension = :extension
+			WHERE id = :id
 			LIMIT 1'
 		);
-		$stmt->execute([':extension' => $extension]);
+		$stmt->execute([':id' => $registrationId]);
 
 		$row = $stmt->fetch(\PDO::FETCH_ASSOC);
 		return is_array($row) ? $this->withRegistrationDisplayAddress($row) : [];
@@ -2525,7 +2825,9 @@ class Registrationwatch implements \BMO {
 		if ($toState === self::STATUS_REGISTERED_NO_QUALIFY) {
 			$latency = 'Unavailable; qualify is not enabled.';
 		}
-		$registrationDetails = $this->getRegistrationDetails($extension);
+		$registrationDetails = !empty($transition['registration_id'])
+			? $this->getRegistrationDetailsById((int)$transition['registration_id'])
+			: [];
 		$deviceName = trim((string)($registrationDetails['device_name'] ?? ''));
 		$firmwareVersion = trim((string)($registrationDetails['firmware_version'] ?? ''));
 		$userAgent = trim((string)($registrationDetails['user_agent'] ?? ''));
@@ -2674,12 +2976,15 @@ class Registrationwatch implements \BMO {
 	private function insertAlertHistory(array $alert): void {
 		$stmt = $this->db()->prepare(
 			'INSERT IGNORE INTO registrationwatch_alert_history
-				(extension, history_id, reminder_n, alert_type, status, recipient, subject, message, sent_at, result, error)
+				(registration_id, registration_key, extension, contact_uri, history_id, reminder_n, alert_type, status, recipient, subject, message, sent_at, result, error)
 			VALUES
-				(:extension, :history_id, :reminder_n, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
+				(:registration_id, :registration_key, :extension, :contact_uri, :history_id, :reminder_n, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
 		);
 		$stmt->execute([
+			':registration_id' => $alert['registration_id'] ?? null,
+			':registration_key' => $alert['registration_key'] ?? null,
 			':extension' => $alert['extension'],
+			':contact_uri' => $alert['contact_uri'] ?? null,
 			':history_id' => $alert['history_id'],
 			':reminder_n' => $alert['reminder_n'] ?? 0,
 			':alert_type' => $alert['alert_type'],
@@ -2696,12 +3001,15 @@ class Registrationwatch implements \BMO {
 	private function reserveAlertHistory(array $alert): bool {
 		$stmt = $this->db()->prepare(
 			'INSERT IGNORE INTO registrationwatch_alert_history
-				(extension, history_id, reminder_n, alert_type, status, recipient, subject, message, sent_at, result, error)
+				(registration_id, registration_key, extension, contact_uri, history_id, reminder_n, alert_type, status, recipient, subject, message, sent_at, result, error)
 			VALUES
-				(:extension, :history_id, :reminder_n, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
+				(:registration_id, :registration_key, :extension, :contact_uri, :history_id, :reminder_n, :alert_type, :status, :recipient, :subject, :message, :sent_at, :result, :error)'
 		);
 		$stmt->execute([
+			':registration_id' => $alert['registration_id'] ?? null,
+			':registration_key' => $alert['registration_key'] ?? null,
 			':extension' => $alert['extension'],
+			':contact_uri' => $alert['contact_uri'] ?? null,
 			':history_id' => $alert['history_id'],
 			':reminder_n' => $alert['reminder_n'] ?? 0,
 			':alert_type' => $alert['alert_type'],

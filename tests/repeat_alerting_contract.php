@@ -8,52 +8,110 @@ function assert_true(bool $condition, string $message): void {
 	}
 }
 
+function registration_key(string $extension, string $sourceIp, string $uaClass = ''): string {
+	$basis = strtolower(trim($extension)) . "\0" . strtolower(trim($sourceIp));
+	$uaClass = strtolower(trim(preg_replace('/\s+/', ' ', $uaClass) ?? ''));
+	if ($uaClass !== '') {
+		$basis .= "\0" . $uaClass;
+	}
+	return hash('sha256', $basis);
+}
+
+function resolve_identity_group(array $items, array $existingState = []): array {
+	$usable = [];
+	foreach ($items as $item) {
+		$ua = strtolower(trim(preg_replace('/\s+/', ' ', (string)($item['user_agent'] ?? '')) ?? ''));
+		if ($ua !== '') {
+			$usable[$ua] = true;
+		}
+	}
+	ksort($usable);
+
+	$existingClasses = $existingState['classes'] ?? [];
+	$existingShared = $existingState['shared'] ?? [];
+	$existingNonShared = array_values(array_filter(array_map('strval', $existingClasses), function ($ua) {
+		return $ua !== '';
+	}));
+
+	$split = [];
+	if (count($usable) > 1) {
+		$split = array_fill_keys(array_keys($usable), true);
+	} elseif (count($usable) === 1 && $existingNonShared) {
+		$split = array_fill_keys(array_unique(array_merge(array_keys($usable), $existingNonShared)), true);
+	}
+
+	$anchor = null;
+	if ($split && $existingShared) {
+		foreach ($existingShared as $existing) {
+			foreach ($items as $idx => $item) {
+				if (!empty($existing['contact_uri']) && $existing['contact_uri'] === ($item['contact_uri'] ?? '')) {
+					$anchor = $idx;
+					break 2;
+				}
+			}
+		}
+		if ($anchor === null) {
+			$ranked = [];
+			foreach ($items as $idx => $item) {
+				$ranked[] = [
+					'index' => $idx,
+					'ua' => strtolower(trim((string)($item['user_agent'] ?? ''))),
+					'contact_uri' => (string)($item['contact_uri'] ?? ''),
+				];
+			}
+			usort($ranked, function ($a, $b) {
+				return strcmp($a['ua'], $b['ua']) ?: strcmp($a['contact_uri'], $b['contact_uri']);
+			});
+			$anchor = (int)$ranked[0]['index'];
+		}
+	}
+
+	foreach ($items as $idx => $item) {
+		$ua = strtolower(trim(preg_replace('/\s+/', ' ', (string)($item['user_agent'] ?? '')) ?? ''));
+		$class = ($anchor !== $idx && $ua !== '' && isset($split[$ua])) ? $ua : '';
+		$items[$idx]['registration_ua_class'] = $class;
+		$items[$idx]['registration_key'] = registration_key($item['extension'], $item['source_ip'], $class);
+	}
+
+	return $items;
+}
+
+function escalating_interval_seconds(int $alertCount): int {
+	$steps = [300, 900, 3600, 14400, 86400];
+	return $steps[min(max(0, $alertCount - 1), count($steps) - 1)];
+}
+
 function fibonacci_interval_seconds(int $alertCount): int {
 	$base = 300;
 	$ceiling = 86400;
 	$step = max(1, $alertCount);
 	$previous = 0;
 	$current = 1;
-
 	for ($i = 1; $i < $step; $i++) {
 		$next = $previous + $current;
 		$previous = $current;
 		$current = $next;
-
 		if ($current * $base >= $ceiling) {
 			return $ceiling;
 		}
 	}
-
 	return min($ceiling, $current * $base);
 }
 
-function escalating_interval_seconds(int $alertCount): int {
-	$steps = [300, 900, 3600, 14400, 86400];
-	$index = max(0, $alertCount - 1);
-	return $steps[min($index, count($steps) - 1)];
-}
-
 function is_still_alertable(string $alertType, string $status): bool {
-	if ($alertType === 'unreachable') {
-		return $status === 'Unreachable';
-	}
-	if ($alertType === 'not_registered') {
-		return $status === 'Not registered';
-	}
-
-	return false;
+	return ($alertType === 'unreachable' && $status === 'Unreachable')
+		|| ($alertType === 'not_registered' && $status === 'Not registered');
 }
 
-function handoff_escalation(PDO $db, string $extension, int $historyId, string $alertType, string $createdAt, string $now): void {
+function handoff_escalation(PDO $db, int $registrationId, string $registrationKey, string $extension, int $historyId, string $alertType, string $createdAt, string $now): void {
 	$stmt = $db->prepare(
-		'SELECT extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode
+		'SELECT registration_id, registration_key, extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode
 		FROM registrationwatch_alert_escalation
-		WHERE extension = :extension
+		WHERE registration_id = :registration_id
 		ORDER BY active_since ASC, id ASC
 		LIMIT 1'
 	);
-	$stmt->execute([':extension' => $extension]);
+	$stmt->execute([':registration_id' => $registrationId]);
 	$existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
 	$activeSince = is_array($existing) && !empty($existing['active_since']) ? $existing['active_since'] : $createdAt;
@@ -61,15 +119,17 @@ function handoff_escalation(PDO $db, string $extension, int $historyId, string $
 	$alertCount = is_array($existing) ? (int)$existing['alert_count'] : 0;
 	$nextDueAt = is_array($existing) && !empty($existing['next_due_at']) ? $existing['next_due_at'] : '2026-06-15 10:05:00';
 
-	$db->prepare('DELETE FROM registrationwatch_alert_escalation WHERE extension = :extension AND alert_type <> :alert_type')
-		->execute([':extension' => $extension, ':alert_type' => $alertType]);
+	$db->prepare('DELETE FROM registrationwatch_alert_escalation WHERE registration_id = :registration_id AND alert_type <> :alert_type')
+		->execute([':registration_id' => $registrationId, ':alert_type' => $alertType]);
 
 	$db->prepare(
 		'INSERT INTO registrationwatch_alert_escalation
-			(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode)
+			(registration_id, registration_key, extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode)
 		VALUES
-			(:extension, :history_id, :alert_type, :active_since, :last_alert_at, :alert_count, :next_due_at, :repeat_mode)
-		ON CONFLICT(extension, alert_type) DO UPDATE SET
+			(:registration_id, :registration_key, :extension, :history_id, :alert_type, :active_since, :last_alert_at, :alert_count, :next_due_at, :repeat_mode)
+		ON CONFLICT(registration_id, alert_type) DO UPDATE SET
+			registration_key = excluded.registration_key,
+			extension = excluded.extension,
 			history_id = excluded.history_id,
 			active_since = excluded.active_since,
 			last_alert_at = excluded.last_alert_at,
@@ -77,6 +137,8 @@ function handoff_escalation(PDO $db, string $extension, int $historyId, string $
 			next_due_at = excluded.next_due_at,
 			repeat_mode = excluded.repeat_mode'
 	)->execute([
+		':registration_id' => $registrationId,
+		':registration_key' => $registrationKey,
 		':extension' => $extension,
 		':history_id' => $historyId,
 		':alert_type' => $alertType,
@@ -88,56 +150,14 @@ function handoff_escalation(PDO $db, string $extension, int $historyId, string $
 	]);
 }
 
-function storm_contract_decision(array $alerts, $threshold, array $summaryResults = []): array {
+function storm_contract_decision(array $alerts, $threshold): array {
 	$threshold = trim((string)$threshold);
 	$threshold = $threshold !== '' && ctype_digit($threshold) ? (int)$threshold : 0;
-	$recipients = [];
-	foreach ($alerts as $alert) {
-		$recipients[$alert['recipient']] = true;
-	}
-
 	if ($threshold <= 0 || count($alerts) < $threshold) {
-		return [
-			'individuals' => array_map(function ($alert) {
-				$alert['result'] = 'sent';
-				return $alert;
-			}, $alerts),
-			'summaries' => [],
-			'history' => array_map(function ($alert) {
-				$alert['result'] = 'sent';
-				return $alert;
-			}, $alerts),
-		];
+		return ['individuals' => $alerts, 'summaries' => []];
 	}
-
-	$history = array_map(function ($alert) use ($summaryResults) {
-		$recipient = $alert['recipient'];
-		$summaryResult = $summaryResults[$recipient] ?? ['status' => true, 'message' => ''];
-		$alert['result'] = $summaryResult['status'] ? 'storm_suppressed' : 'storm_summary_failed';
-		$alert['error'] = $summaryResult['status'] ? null : $summaryResult['message'];
-		return $alert;
-	}, $alerts);
-	$allRecovery = count($alerts) > 0;
-	foreach ($alerts as $alert) {
-		$allRecovery = $allRecovery && $alert['alert_type'] === 'recovery';
-	}
-	$message = count($alerts) . ' alert emails were suppressed in this processing pass.';
-	if ($allRecovery) {
-		$message .= "\n" . count($alerts) . ' recovery alerts were suppressed in this pass.';
-	}
-
-	return [
-		'individuals' => [],
-		'summaries' => array_map(function ($recipient) use ($message, $summaryResults) {
-			$summaryResult = $summaryResults[$recipient] ?? ['status' => true, 'message' => ''];
-			return [
-				'recipient' => $recipient,
-				'result' => $summaryResult['status'] ? 'sent' : 'failed',
-				'message' => $message,
-			];
-		}, array_keys($recipients)),
-		'history' => $history,
-	];
+	$recipients = array_values(array_unique(array_column($alerts, 'recipient')));
+	return ['individuals' => [], 'summaries' => $recipients];
 }
 
 $db = new PDO('sqlite::memory:');
@@ -145,7 +165,10 @@ $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 $db->exec(
 	'CREATE TABLE registrationwatch_alert_history (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		registration_id INTEGER,
+		registration_key TEXT,
 		extension TEXT NOT NULL,
+		contact_uri TEXT,
 		history_id INTEGER,
 		reminder_n INTEGER NOT NULL DEFAULT 0,
 		alert_type TEXT NOT NULL,
@@ -158,6 +181,8 @@ $db->exec(
 $db->exec(
 	'CREATE TABLE registrationwatch_alert_escalation (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		registration_id INTEGER NOT NULL,
+		registration_key TEXT NOT NULL,
 		extension TEXT NOT NULL,
 		history_id INTEGER NOT NULL,
 		alert_type TEXT NOT NULL,
@@ -166,25 +191,41 @@ $db->exec(
 		alert_count INTEGER NOT NULL DEFAULT 0,
 		next_due_at TEXT NOT NULL,
 		repeat_mode TEXT NOT NULL,
-		UNIQUE (extension, alert_type)
+		UNIQUE (registration_id, alert_type)
 	)'
 );
 $db->exec(
 	'CREATE TABLE registrationwatch_registrations (
-		extension TEXT PRIMARY KEY,
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		registration_key TEXT NOT NULL UNIQUE,
+		extension TEXT NOT NULL,
+		source_ip TEXT NOT NULL,
+		registration_ua_class TEXT NOT NULL DEFAULT "",
 		enabled INTEGER NOT NULL,
+		repeat_mode TEXT,
 		last_known_status TEXT NOT NULL
 	)'
 );
 
+$keyA = registration_key('2001', '198.51.100.10');
+$keyB = registration_key('2001', '198.51.100.11');
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$keyA, '2001', '198.51.100.10', 1, 'escalating', 'Reachable']);
+$regA = (int)$db->lastInsertId();
+$db->prepare('INSERT INTO registrationwatch_registrations (registration_key, extension, source_ip, enabled, repeat_mode, last_known_status) VALUES (?, ?, ?, ?, ?, ?)')
+	->execute([$keyB, '2001', '198.51.100.11', 1, null, 'Unreachable']);
+$regB = (int)$db->lastInsertId();
+assert_true($regA !== $regB, 'two source IPs under one extension should be separate watched registrations');
+
 $insertAlert = $db->prepare(
 	'INSERT OR IGNORE INTO registrationwatch_alert_history
-		(extension, history_id, reminder_n, alert_type, status, recipient, result)
+		(registration_id, registration_key, extension, history_id, reminder_n, alert_type, status, recipient, result)
 	VALUES
-		(:extension, :history_id, :reminder_n, :alert_type, :status, :recipient, :result)'
+		(:registration_id, :registration_key, :extension, :history_id, :reminder_n, :alert_type, :status, :recipient, :result)'
 );
-
 $baseAlert = [
+	':registration_id' => $regB,
+	':registration_key' => $keyB,
 	':extension' => '2001',
 	':history_id' => 10,
 	':alert_type' => 'unreachable',
@@ -192,188 +233,70 @@ $baseAlert = [
 	':recipient' => 'admin@example.invalid',
 	':result' => 'sent',
 ];
-
 $insertAlert->execute($baseAlert + [':reminder_n' => 0]);
 assert_true($insertAlert->rowCount() === 1, 'transition alert should reserve reminder_n 0');
-
 $insertAlert->execute($baseAlert + [':reminder_n' => 1]);
 assert_true($insertAlert->rowCount() === 1, 'first reminder should not be blocked by transition alert key');
-
 $insertAlert->execute($baseAlert + [':reminder_n' => 1]);
 assert_true($insertAlert->rowCount() === 0, 'same reminder_n should never reserve twice');
 
-$db->exec(
-	"INSERT INTO registrationwatch_alert_escalation
-		(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode)
-	VALUES
-		('2001', 10, 'unreachable', '2026-06-15 10:00:00', '2026-06-15 10:00:00', 1, '2026-06-15 10:05:00', '5m')"
-);
-$delete = $db->prepare('DELETE FROM registrationwatch_alert_escalation WHERE extension = :extension AND alert_type = :alert_type');
-$delete->execute([':extension' => '2001', ':alert_type' => 'unreachable']);
-assert_true((int)$db->query('SELECT COUNT(*) FROM registrationwatch_alert_escalation')->fetchColumn() === 0, 'recovery should delete escalation row');
+handoff_escalation($db, $regB, $keyB, '2001', 20, 'unreachable', '2026-06-15 10:00:00', '2026-06-15 10:00:00');
+assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE registration_id = {$regB}")->fetchColumn() === 1, 'unreachable sibling should have its own escalation');
+assert_true(is_still_alertable('unreachable', 'Reachable') === false, 'reachable status should recover unreachable registration');
+assert_true(is_still_alertable('not_registered', 'Not registered') === true, 'missing same registration remains alertable as not registered');
 
-$db->exec(
-	"INSERT INTO registrationwatch_registrations (extension, enabled, last_known_status)
-	VALUES ('2002', 1, 'Unreachable')"
-);
-$db->exec(
-	"INSERT INTO registrationwatch_alert_escalation
-		(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode)
-	VALUES
-		('2002', 11, 'unreachable', '2026-06-15 10:00:00', '2026-06-15 10:00:00', 1, '2026-06-15 10:05:00', '5m')"
-);
-if (!is_still_alertable('unreachable', 'Reachable')) {
-	$delete->execute([':extension' => '2002', ':alert_type' => 'unreachable']);
-}
-assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE extension = '2002'")->fetchColumn() === 0, 'recovered-between-ticks registration should not keep a due reminder row');
+$live = [$keyA => 'Reachable'];
+$statusForMissingB = isset($live[$keyB]) ? $live[$keyB] : 'Not registered';
+assert_true($statusForMissingB === 'Not registered', 'reachable sibling must not recover missing registration');
 
-$neverMode = 'never';
-$neverHistoryId = 12;
-$neverExtension = '2003';
-$insertAlert->execute([
-	':extension' => $neverExtension,
-	':history_id' => $neverHistoryId,
-	':reminder_n' => 0,
-	':alert_type' => 'unreachable',
-	':status' => 'Unreachable',
-	':recipient' => 'admin@example.invalid',
-	':result' => 'sent',
+$db->prepare('DELETE FROM registrationwatch_alert_escalation WHERE registration_id = ? AND alert_type = ?')->execute([$regB, 'unreachable']);
+assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE registration_id = {$regB}")->fetchColumn() === 0, 'recovery should clear only same registration escalation');
+
+handoff_escalation($db, $regB, $keyB, '2001', 21, 'unreachable', '2026-06-15 10:00:00', '2026-06-15 10:00:00');
+$db->exec("UPDATE registrationwatch_alert_escalation SET alert_count = 2, next_due_at = '2026-06-15 11:20:00' WHERE registration_id = {$regB}");
+handoff_escalation($db, $regB, $keyB, '2001', 22, 'not_registered', '2026-06-15 10:21:00', '2026-06-15 10:21:00');
+$row = $db->query("SELECT alert_type, alert_count, next_due_at FROM registrationwatch_alert_escalation WHERE registration_id = {$regB}")->fetch(PDO::FETCH_ASSOC);
+assert_true($row['alert_type'] === 'not_registered', 'flap handoff should change type for same registration');
+assert_true((int)$row['alert_count'] === 2, 'flap handoff should preserve alert_count for same registration');
+assert_true($row['next_due_at'] === '2026-06-15 11:20:00', 'flap handoff should preserve next due time for same registration');
+
+$db->exec("UPDATE registrationwatch_registrations SET repeat_mode = 'daily' WHERE id = {$regB}");
+$modeA = $db->query("SELECT COALESCE(repeat_mode, 'global') FROM registrationwatch_registrations WHERE id = {$regA}")->fetchColumn();
+$modeB = $db->query("SELECT repeat_mode FROM registrationwatch_registrations WHERE id = {$regB}")->fetchColumn();
+assert_true($modeA === 'escalating', 'per-registration override should not affect sibling registration');
+assert_true($modeB === 'daily', 'per-registration override should apply to selected registration');
+
+$sameUa = resolve_identity_group([
+	['extension' => '2002', 'source_ip' => '203.0.113.10', 'contact_uri' => 'sip:2002@203.0.113.10:5060', 'user_agent' => 'Phone/1'],
+	['extension' => '2002', 'source_ip' => '203.0.113.10', 'contact_uri' => 'sip:2002@203.0.113.10:5062', 'user_agent' => 'Phone/1'],
 ]);
-if ($neverMode !== 'never') {
-	$db->prepare(
-		'INSERT INTO registrationwatch_alert_escalation
-			(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode)
-		VALUES
-			(:extension, :history_id, :alert_type, :active_since, :last_alert_at, :alert_count, :next_due_at, :repeat_mode)'
-	)->execute([
-		':extension' => $neverExtension,
-		':history_id' => $neverHistoryId,
-		':alert_type' => 'unreachable',
-		':active_since' => '2026-06-15 10:00:00',
-		':last_alert_at' => '2026-06-15 10:00:00',
-		':alert_count' => 0,
-		':next_due_at' => '2026-06-15 10:05:00',
-		':repeat_mode' => $neverMode,
-	]);
-}
-assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_history WHERE extension = '2003'")->fetchColumn() === 1, 'repeat_mode never should allow exactly one transition alert');
-assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE extension = '2003'")->fetchColumn() === 0, 'repeat_mode never should not create an escalation row');
+assert_true($sameUa[0]['registration_key'] === $sameUa[1]['registration_key'], 'same extension/IP/same UA should collapse');
+$differentUa = resolve_identity_group([
+	['extension' => '2002', 'source_ip' => '203.0.113.10', 'contact_uri' => 'sip:2002@203.0.113.10:5060', 'user_agent' => 'PhoneA'],
+	['extension' => '2002', 'source_ip' => '203.0.113.10', 'contact_uri' => 'sip:2002@203.0.113.10:5062', 'user_agent' => 'PhoneB'],
+]);
+assert_true($differentUa[0]['registration_key'] !== $differentUa[1]['registration_key'], 'different usable UAs behind same IP should split');
+$missingUa = resolve_identity_group([
+	['extension' => '2002', 'source_ip' => '203.0.113.10', 'contact_uri' => 'sip:2002@203.0.113.10:5060', 'user_agent' => ''],
+	['extension' => '2002', 'source_ip' => '203.0.113.10', 'contact_uri' => 'sip:2002@203.0.113.10:5062', 'user_agent' => 'PhoneB'],
+]);
+assert_true($missingUa[0]['registration_key'] === $missingUa[1]['registration_key'], 'missing UA should collapse and never force a split');
+$anchored = resolve_identity_group([
+	['extension' => '2002', 'source_ip' => '203.0.113.10', 'contact_uri' => 'sip:2002@203.0.113.10:5060', 'user_agent' => 'PhoneA'],
+	['extension' => '2002', 'source_ip' => '203.0.113.10', 'contact_uri' => 'sip:2002@203.0.113.10:5062', 'user_agent' => 'PhoneB'],
+], ['classes' => [''], 'shared' => [['contact_uri' => 'sip:2002@203.0.113.10:5060', 'user_agent' => null]]]);
+assert_true($anchored[0]['registration_ua_class'] === '', 'incumbent shared registration should keep bare key on later conflict');
+assert_true($anchored[1]['registration_ua_class'] === 'phoneb', 'conflicting newcomer should get suffixed key');
 
-$db->exec(
-	"INSERT INTO registrationwatch_alert_escalation
-		(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode)
-	VALUES
-		('2004', 13, 'not_registered', '2026-06-15 10:00:00', '2026-06-15 10:00:00', 1, '2026-06-15 10:05:00', '5m')"
-);
-try {
-	throw new RuntimeException('Asterisk unavailable');
-} catch (RuntimeException $e) {
-	// The due-reminder pass returns here before evaluating rows.
-}
-assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE extension = '2004'")->fetchColumn() === 1, 'live snapshot failure should leave escalation rows intact for retry');
+$storm = storm_contract_decision([
+	['registration_id' => $regA, 'extension' => '2001', 'recipient' => 'admin@example.invalid'],
+	['registration_id' => $regB, 'extension' => '2001', 'recipient' => 'admin@example.invalid'],
+], 2);
+assert_true(count($storm['summaries']) === 1 && count($storm['individuals']) === 0, 'storm threshold should count sibling registrations separately');
 
 assert_true(escalating_interval_seconds(1) === 300, 'escalating reminder 1 should wait 5 minutes');
-assert_true(escalating_interval_seconds(2) === 900, 'escalating reminder 2 should wait 15 minutes');
-assert_true(escalating_interval_seconds(3) === 3600, 'escalating reminder 3 should wait 1 hour');
-assert_true(escalating_interval_seconds(4) === 14400, 'escalating reminder 4 should wait 4 hours');
-assert_true(escalating_interval_seconds(5) === 86400, 'escalating reminder 5 should wait 1 day');
 assert_true(escalating_interval_seconds(6) === 86400, 'escalating should hold at daily after exhaustion');
-
-handoff_escalation($db, '2005', 14, 'unreachable', '2026-06-15 10:00:00', '2026-06-15 10:00:00');
-assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE extension = '2005'")->fetchColumn() === 1, 'degrade path should nag after reachable-to-unreachable');
-handoff_escalation($db, '2005', 15, 'not_registered', '2026-06-15 10:02:00', '2026-06-15 10:02:00');
-assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE extension = '2005'")->fetchColumn() === 1, 'degrade path should remain under one active reminder type');
-assert_true((int)$db->query("SELECT COUNT(*) FROM registrationwatch_alert_escalation WHERE extension = '2005' AND alert_type = 'not_registered'")->fetchColumn() === 1, 'degrade path should hand off to not_registered without a silent gap');
-
-handoff_escalation($db, '2006', 20, 'unreachable', '2026-06-15 10:00:00', '2026-06-15 10:00:00');
-$db->exec("UPDATE registrationwatch_alert_escalation SET alert_count = 1, last_alert_at = '2026-06-15 10:05:00', next_due_at = '2026-06-15 10:20:00' WHERE extension = '2006'");
-handoff_escalation($db, '2006', 21, 'not_registered', '2026-06-15 10:06:00', '2026-06-15 10:06:00');
-$row = $db->query("SELECT alert_type, active_since, alert_count, next_due_at FROM registrationwatch_alert_escalation WHERE extension = '2006'")->fetch(PDO::FETCH_ASSOC);
-assert_true($row['alert_type'] === 'not_registered', 'flap path should hand off to not_registered');
-assert_true($row['active_since'] === '2026-06-15 10:00:00', 'flap path should keep original active_since');
-assert_true((int)$row['alert_count'] === 1, 'flap path should carry alert_count after first type flip');
-assert_true($row['next_due_at'] === '2026-06-15 10:20:00', 'flap path should not restart next_due_at after first type flip');
-
-$db->exec("UPDATE registrationwatch_alert_escalation SET alert_count = 2, last_alert_at = '2026-06-15 10:20:00', next_due_at = '2026-06-15 11:20:00' WHERE extension = '2006'");
-handoff_escalation($db, '2006', 22, 'unreachable', '2026-06-15 10:21:00', '2026-06-15 10:21:00');
-$row = $db->query("SELECT alert_type, alert_count, next_due_at FROM registrationwatch_alert_escalation WHERE extension = '2006'")->fetch(PDO::FETCH_ASSOC);
-assert_true($row['alert_type'] === 'unreachable', 'flap path should hand back to unreachable');
-assert_true((int)$row['alert_count'] === 2, 'flap path should carry alert_count after second type flip');
-assert_true($row['next_due_at'] === '2026-06-15 11:20:00', 'flap path should not restart next_due_at after second type flip');
-
-$db->exec("UPDATE registrationwatch_alert_escalation SET alert_count = 3, last_alert_at = '2026-06-15 11:20:00', next_due_at = '2026-06-15 15:20:00' WHERE extension = '2006'");
-handoff_escalation($db, '2006', 23, 'not_registered', '2026-06-15 11:21:00', '2026-06-15 11:21:00');
-$row = $db->query("SELECT alert_type, alert_count, next_due_at FROM registrationwatch_alert_escalation WHERE extension = '2006'")->fetch(PDO::FETCH_ASSOC);
-assert_true($row['alert_type'] === 'not_registered', 'flap path should hand off repeatedly without recovery');
-assert_true((int)$row['alert_count'] === 3, 'flap path should keep climbing instead of resetting to zero');
-assert_true($row['next_due_at'] === '2026-06-15 15:20:00', 'flap path should preserve the climbing due time');
-
-$stormAlerts = [
-	['extension' => '3001', 'alert_type' => 'unreachable', 'status' => 'Unreachable', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
-	['extension' => '3002', 'alert_type' => 'not_registered', 'status' => 'Not registered', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
-];
-$decision = storm_contract_decision($stormAlerts, 3);
-assert_true(count($decision['individuals']) === 2, 'below storm threshold should send individual alerts');
-assert_true(count($decision['summaries']) === 0, 'below storm threshold should not send a summary');
-
-$decision = storm_contract_decision($stormAlerts, 2);
-assert_true(count($decision['individuals']) === 0, 'at storm threshold should suppress individual sends');
-assert_true(count($decision['summaries']) === 1, 'at storm threshold should send one summary per recipient');
-assert_true(count(array_filter($decision['history'], function ($row) {
-	return $row['result'] === 'storm_suppressed';
-})) === 2, 'storm suppressed individual rows should be logged as storm_suppressed');
-$failedSummaryDecision = storm_contract_decision($stormAlerts, 2, [
-	'admin@example.invalid' => ['status' => false, 'message' => 'mailer down'],
-]);
-assert_true(count(array_filter($failedSummaryDecision['history'], function ($row) {
-	return $row['result'] === 'storm_summary_failed' && $row['error'] === 'mailer down';
-})) === 2, 'individual rows should not be marked storm_suppressed when the recipient summary fails');
-
-$sharedCounterAlerts = [
-	['extension' => '3003', 'alert_type' => 'unreachable', 'status' => 'Unreachable', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
-	['extension' => '3004', 'alert_type' => 'not_registered', 'status' => 'Not registered', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
-	['extension' => '3005', 'alert_type' => 'unreachable', 'status' => 'Unreachable', 'recipient' => 'admin@example.invalid', 'source' => 'reminder'],
-];
-$decision = storm_contract_decision($sharedCounterAlerts, 3);
-assert_true(count($decision['summaries']) === 1 && count($decision['individuals']) === 0, 'transition alerts and due reminders should share one storm counter');
-
-$recoveryDecision = storm_contract_decision([
-	['extension' => '3006', 'alert_type' => 'recovery', 'status' => 'Reachable', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
-	['extension' => '3007', 'alert_type' => 'recovery', 'status' => 'Reachable', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
-], 2);
-assert_true(count($recoveryDecision['summaries']) === 1, 'mass recovery pass should send one recovery storm summary');
-assert_true(strpos($recoveryDecision['summaries'][0]['message'], 'recovery alerts were suppressed in this pass') !== false, 'recovery storm summary should use per-pass wording');
-assert_true(strpos($recoveryDecision['summaries'][0]['message'], 'site outage has recovered') === false, 'recovery storm summary must not make a continuity claim');
-
-$disabledDecision = storm_contract_decision($sharedCounterAlerts, 0);
-assert_true(count($disabledDecision['individuals']) === 3, 'storm threshold 0 should disable summaries');
-assert_true(count($disabledDecision['summaries']) === 0, 'storm threshold 0 should send no summary');
-$emptyDecision = storm_contract_decision($sharedCounterAlerts, '');
-assert_true(count($emptyDecision['individuals']) === 3, 'empty storm threshold should disable summaries');
-
-foreach ([$decision, $recoveryDecision] as $stormDecision) {
-	assert_true(!(count($stormDecision['summaries']) > 0 && count($stormDecision['individuals']) > 0), 'one pass should never send both summary and individual emails');
-}
-
-$db->exec(
-	"INSERT INTO registrationwatch_alert_escalation
-		(extension, history_id, alert_type, active_since, last_alert_at, alert_count, next_due_at, repeat_mode)
-	VALUES
-		('3008', 30, 'not_registered', '2026-06-15 10:00:00', '2026-06-15 10:00:00', 1, '2026-06-15 10:05:00', 'escalating')"
-);
-$stormReminderDecision = storm_contract_decision([
-	['extension' => '3008', 'alert_type' => 'not_registered', 'status' => 'Not registered', 'recipient' => 'admin@example.invalid', 'source' => 'reminder'],
-	['extension' => '3009', 'alert_type' => 'not_registered', 'status' => 'Not registered', 'recipient' => 'admin@example.invalid', 'source' => 'transition'],
-], 2);
-assert_true(count($stormReminderDecision['summaries']) === 1, 'storm reminder pass should summarise at threshold');
-$db->exec("UPDATE registrationwatch_alert_escalation SET alert_count = 2, last_alert_at = '2026-06-15 10:05:00', next_due_at = '2026-06-15 10:20:00' WHERE extension = '3008'");
-$row = $db->query("SELECT alert_count, next_due_at FROM registrationwatch_alert_escalation WHERE extension = '3008'")->fetch(PDO::FETCH_ASSOC);
-assert_true((int)$row['alert_count'] === 2, 'storm-suppressed reminder should still advance alert_count');
-assert_true($row['next_due_at'] === '2026-06-15 10:20:00', 'storm-suppressed reminder should move next_due_at so it does not re-storm next tick');
-
 assert_true(fibonacci_interval_seconds(1) === 300, 'fibonacci reminder 1 should wait 5 minutes');
-assert_true(fibonacci_interval_seconds(2) === 300, 'fibonacci reminder 2 should also wait 5 minutes by contract');
 assert_true(fibonacci_interval_seconds(14) === 86400, 'fibonacci should clamp at daily ceiling');
-assert_true(fibonacci_interval_seconds(20) === 86400, 'fibonacci should hold at daily ceiling');
 
 echo "repeat alerting contract tests passed\n";

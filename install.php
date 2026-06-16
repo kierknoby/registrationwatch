@@ -9,6 +9,7 @@ $sql = [];
 
 $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_registrations (
 	id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+	registration_key CHAR(64) NOT NULL,
 	extension VARCHAR(80) NOT NULL,
 	description VARCHAR(255) NULL,
 	notes VARCHAR(48) NOT NULL DEFAULT '',
@@ -20,11 +21,13 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_registrations (
 	contact_uri TEXT NULL,
 	latency_ms DECIMAL(10,3) NULL,
 	source_ip VARCHAR(45) NULL,
+	registration_ua_class VARCHAR(191) NOT NULL DEFAULT '',
 	transport VARCHAR(20) NULL,
 	user_agent VARCHAR(255) NULL,
 	device_name VARCHAR(255) NULL,
 	firmware_version VARCHAR(80) NULL,
 	source_port INT UNSIGNED NULL,
+	contact_count INT UNSIGNED NOT NULL DEFAULT 1,
 	contact_expires_at DATETIME NULL,
 	qualify_frequency INT UNSIGNED NULL,
 	last_heartbeat_at DATETIME NULL,
@@ -35,17 +38,21 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_registrations (
 	created_at DATETIME NULL,
 	updated_at DATETIME NULL,
 	PRIMARY KEY (id),
-	UNIQUE KEY registrationwatch_registrations_extension (extension),
+	UNIQUE KEY registrationwatch_registrations_key (registration_key),
+	KEY registrationwatch_registrations_extension (extension),
 	KEY registrationwatch_registrations_enabled (enabled),
 	KEY registrationwatch_registrations_status (last_known_status),
 	KEY registrationwatch_registrations_last_checked (last_checked_at),
-	KEY registrationwatch_registrations_source_ip (source_ip)
+	KEY registrationwatch_registrations_source_ip (source_ip),
+	KEY registrationwatch_registrations_source_identity (extension, source_ip)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 // Phase 4 topology columns are added via the upgrade column-check logic below.
 
 $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_status_history (
 	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+	registration_id INT UNSIGNED NOT NULL,
+	registration_key CHAR(64) NOT NULL,
 	extension VARCHAR(80) NOT NULL,
 	from_state VARCHAR(40) NULL,
 	to_state VARCHAR(40) NOT NULL,
@@ -55,6 +62,8 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_status_history (
 	latency_ms DECIMAL(10,3) NULL,
 	created_at DATETIME NOT NULL,
 	PRIMARY KEY (id),
+	KEY registrationwatch_status_history_registration_id (registration_id),
+	KEY registrationwatch_status_history_registration_key (registration_key),
 	KEY registrationwatch_status_history_extension (extension),
 	KEY registrationwatch_status_history_created_at (created_at),
 	KEY registrationwatch_status_history_to_state (to_state),
@@ -70,11 +79,14 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_settings (
 
 $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_history (
 	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+	registration_id INT UNSIGNED NULL,
+	registration_key CHAR(64) NULL,
 	extension VARCHAR(80) NOT NULL,
 	history_id BIGINT UNSIGNED NULL,
 	reminder_n INT UNSIGNED NOT NULL DEFAULT 0,
 	alert_type VARCHAR(40) NOT NULL,
 	status VARCHAR(40) NOT NULL,
+	contact_uri TEXT NULL,
 	recipient VARCHAR(255) NOT NULL,
 	subject VARCHAR(255) NOT NULL,
 	message TEXT NULL,
@@ -82,6 +94,8 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_history (
 	result VARCHAR(40) NOT NULL,
 	error TEXT NULL,
 	PRIMARY KEY (id),
+	KEY registrationwatch_alert_history_registration_id (registration_id),
+	KEY registrationwatch_alert_history_registration_key (registration_key),
 	KEY registrationwatch_alert_history_extension (extension),
 	KEY registrationwatch_alert_history_history_id (history_id),
 	KEY registrationwatch_alert_history_reminder_n (reminder_n),
@@ -93,6 +107,8 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_history (
 
 $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_escalation (
 	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+	registration_id INT UNSIGNED NOT NULL,
+	registration_key CHAR(64) NOT NULL,
 	extension VARCHAR(80) NOT NULL,
 	history_id BIGINT UNSIGNED NOT NULL,
 	alert_type VARCHAR(40) NOT NULL,
@@ -104,7 +120,9 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_escalation (
 	created_at DATETIME NULL,
 	updated_at DATETIME NULL,
 	PRIMARY KEY (id),
-	UNIQUE KEY registrationwatch_alert_escalation_extension_type (extension, alert_type),
+	UNIQUE KEY registrationwatch_alert_escalation_registration_type (registration_id, alert_type),
+	KEY registrationwatch_alert_escalation_registration_key (registration_key),
+	KEY registrationwatch_alert_escalation_extension (extension),
 	KEY registrationwatch_alert_escalation_history_id (history_id),
 	KEY registrationwatch_alert_escalation_next_due_at (next_due_at),
 	KEY registrationwatch_alert_escalation_repeat_mode (repeat_mode)
@@ -115,6 +133,7 @@ foreach ($sql as $statement) {
 }
 
 $columns = [
+	'registration_key' => "ALTER TABLE registrationwatch_registrations ADD registration_key CHAR(64) NOT NULL AFTER id",
 	'notes' => "ALTER TABLE registrationwatch_registrations ADD notes VARCHAR(48) NOT NULL DEFAULT '' AFTER description",
 	'notes_updated_at' => "ALTER TABLE registrationwatch_registrations ADD notes_updated_at DATETIME NULL AFTER notes",
 	'repeat_mode' => "ALTER TABLE registrationwatch_registrations ADD repeat_mode VARCHAR(20) NULL AFTER enabled",
@@ -122,11 +141,13 @@ $columns = [
 	'last_known_status' => "ALTER TABLE registrationwatch_registrations ADD last_known_status VARCHAR(40) NOT NULL DEFAULT 'Unknown' AFTER discovered",
 	'contact_uri' => "ALTER TABLE registrationwatch_registrations ADD contact_uri TEXT NULL AFTER last_known_status",
 	'source_ip' => "ALTER TABLE registrationwatch_registrations ADD source_ip VARCHAR(45) NULL AFTER contact_uri",
+	'registration_ua_class' => "ALTER TABLE registrationwatch_registrations ADD registration_ua_class VARCHAR(191) NOT NULL DEFAULT '' AFTER source_ip",
 	'transport' => "ALTER TABLE registrationwatch_registrations ADD transport VARCHAR(20) NULL AFTER source_ip",
 	'user_agent' => "ALTER TABLE registrationwatch_registrations ADD user_agent VARCHAR(255) NULL AFTER transport",
 	'device_name' => "ALTER TABLE registrationwatch_registrations ADD device_name VARCHAR(255) NULL AFTER user_agent",
 	'firmware_version' => "ALTER TABLE registrationwatch_registrations ADD firmware_version VARCHAR(80) NULL AFTER device_name",
 	'source_port' => "ALTER TABLE registrationwatch_registrations ADD source_port INT UNSIGNED NULL AFTER firmware_version",
+	'contact_count' => "ALTER TABLE registrationwatch_registrations ADD contact_count INT UNSIGNED NOT NULL DEFAULT 1 AFTER source_port",
 	'contact_expires_at' => "ALTER TABLE registrationwatch_registrations ADD contact_expires_at DATETIME NULL AFTER source_port",
 	'qualify_frequency' => "ALTER TABLE registrationwatch_registrations ADD qualify_frequency INT UNSIGNED NULL AFTER contact_expires_at",
 	'last_heartbeat_at' => "ALTER TABLE registrationwatch_registrations ADD last_heartbeat_at DATETIME NULL AFTER qualify_frequency",

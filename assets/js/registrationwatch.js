@@ -87,9 +87,9 @@
 
 	window.RegistrationWatchToken = registrationWatchToken;
 
-	function registrationRows(extension) {
-		return $('.registrationwatch tr[data-extension]').filter(function () {
-			return String($(this).data('extension')) === String(extension);
+	function registrationRows(registrationId) {
+		return $('.registrationwatch tr[data-registration-id]').filter(function () {
+			return String($(this).data('registration-id')) === String(registrationId);
 		});
 	}
 
@@ -100,7 +100,7 @@
 
 	function renderStatusRows(registrations) {
 		$.each(registrations || [], function (_, registration) {
-			var rows = registrationRows(registration.extension);
+			var rows = registrationRows(registration.registration_id || registration.id);
 			var status = registration.last_known_status || registration.status || '-';
 			rows.find('.rw-status-value').text(displayLabel(status));
 			rows.find('.rw-device-name').text(registration.device_name || '-');
@@ -230,7 +230,7 @@
 		$('.registrationwatch').on('change', '.rw-enabled', function () {
 			var input = $(this);
 			var row = input.closest('tr');
-			var extension = row.data('extension');
+			var registrationId = row.data('registration-id');
 			var enabled = input.is(':checked') ? 1 : 0;
 			var token = registrationWatchToken(root);
 
@@ -248,7 +248,7 @@
 				dataType: 'json',
 				data: {
 					command: 'setenabled',
-					extension: extension,
+					registration_id: registrationId,
 					enabled: enabled,
 					token: token
 				}
@@ -272,7 +272,7 @@
 		$('.registrationwatch').on('change', '.rw-repeat-mode', function () {
 			var select = $(this);
 			var row = select.closest('tr');
-			var extension = select.data('extension') || row.data('extension') || '';
+			var registrationId = select.data('registration-id') || row.data('registration-id') || '';
 			var repeatMode = select.val() || '';
 			var previous = select.data('previous-value');
 			var status = row.find('.rw-repeat-mode-status');
@@ -281,7 +281,7 @@
 			if (previous === undefined) {
 				previous = '';
 			}
-			if (!extension) {
+			if (!registrationId) {
 				status.text('Save failed');
 				return;
 			}
@@ -299,7 +299,7 @@
 				dataType: 'json',
 				data: {
 					command: 'setrepeatmode',
-					extension: extension,
+					registration_id: registrationId,
 					repeat_mode: repeatMode,
 					token: token
 				}
@@ -687,7 +687,7 @@
 
         function saveRegistrationNote(input) {
                 var $input = $(input);
-                var extension = $input.data('extension') || '';
+                var registrationId = $input.data('registration-id') || '';
                 var $status = $input.closest('td').find('.rw-notes-status');
                 var value = $input.val() || '';
 
@@ -696,7 +696,7 @@
                         $input.val(value);
                 }
 
-                if (!extension) {
+                if (!registrationId) {
                         $status.text('Save failed');
                         return;
                 }
@@ -706,8 +706,8 @@
                         return;
                 }
 
-                noteRequestIds[extension] = (noteRequestIds[extension] || 0) + 1;
-                var requestId = noteRequestIds[extension];
+                noteRequestIds[registrationId] = (noteRequestIds[registrationId] || 0) + 1;
+                var requestId = noteRequestIds[registrationId];
 
                 $status.text('Saving...');
 
@@ -716,13 +716,13 @@
                         method: 'POST',
                         dataType: 'json',
                         data: {
-                                extension: extension,
+                                registration_id: registrationId,
                                 notes: value,
                                 token: registrationWatchToken()
                         },
                         timeout: 10000
                 }).done(function(response) {
-                        if (requestId !== noteRequestIds[extension]) {
+                        if (requestId !== noteRequestIds[registrationId]) {
                                 return;
                         }
 
@@ -737,7 +737,7 @@
 
                         $status.text('Save failed');
                 }).fail(function() {
-                        if (requestId === noteRequestIds[extension]) {
+                        if (requestId === noteRequestIds[registrationId]) {
                                 $status.text('Save failed');
                         }
                 });
@@ -745,10 +745,10 @@
 
         $(document).on('input', '.registrationwatch .rw-registration-notes', function() {
                 var input = this;
-                var extension = $(input).data('extension') || '';
+                var registrationId = $(input).data('registration-id') || '';
 
-                clearTimeout(noteTimers[extension]);
-                noteTimers[extension] = setTimeout(function() {
+                clearTimeout(noteTimers[registrationId]);
+                noteTimers[registrationId] = setTimeout(function() {
                         saveRegistrationNote(input);
                 }, 700);
         });
@@ -807,7 +807,7 @@
 
 	        function installTableControls() {
 	                [
-	                        ['watched', 'Watched extensions'],
+	                        ['watched', 'Watched Registrations'],
 	                        ['status-history', 'Status History'],
 	                        ['alert-history', 'Alert History']
                 ].forEach(function(item) {
@@ -856,7 +856,7 @@
         }
 
         function applyAllLimits(triggerMapChange) {
-                ['Watched extensions', 'Status History', 'Alert History'].forEach(function(title) {
+                ['Watched Registrations', 'Status History', 'Alert History'].forEach(function(title) {
                         var $panel = panelByTitle(title);
                         if ($panel.length) {
                                 applyTableLimit($panel);

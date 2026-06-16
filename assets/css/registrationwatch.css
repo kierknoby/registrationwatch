@@ -114,6 +114,17 @@
 }
 
 .registrationwatch .rw-registration-map {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.registrationwatch .rw-extension-heading {
+	margin-bottom: 8px;
+	font-weight: 600;
+}
+
+.registrationwatch .rw-extension-registrations {
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 	gap: 12px;
@@ -285,7 +296,7 @@
 		padding-right: 10px;
 	}
 
-	.registrationwatch .rw-registration-map {
+	.registrationwatch .rw-extension-registrations {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 10px;
 	}

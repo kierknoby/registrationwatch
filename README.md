@@ -163,7 +163,8 @@ protection.
 
 Storm Threshold limits large batches of alerts generated in the same processing
 pass. It reduces email floods from sudden widespread registration changes, but
-it is not full correlated-outage detection.
+it is not full correlated-outage detection. The threshold counts registration
+alerts in the pass, not extension groups.
 
 Email sending uses FreePBX/CodeIgniter mail support. Registration Watch does not
 use raw PHP `mail()` fallback. A successful local mailer handoff means the
@@ -190,11 +191,10 @@ Granular FreePBX ACL integration is still future work.
 * No webhook or SMS alert delivery yet.
 * Short flaps can be missed between reconciliation runs.
 * Email delivery depends on the PBX mail sender and relay setup.
-* An extension with multiple registered contacts is shown as a single status
-  tile reflecting the best-status contact, not one tile per contact. A device
-  that is down can therefore be masked if the same extension is also registered
-  elsewhere and reachable. Full per-contact display is a candidate for a future
-  release.
+* Registration Watch identifies watched registrations by extension and source
+  IP. Multiple contacts for the same extension from the same source IP are
+  treated as one watched registration. Contact URI and port are shown as detail
+  and may change as the device re-registers.
 
 ## Validation
 
