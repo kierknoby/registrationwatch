@@ -137,12 +137,12 @@ $_rwDisplayLabel = function ($value) {
 $_rwContactExpiryText = function ($expiresAt) {
 	$expiresAt = trim((string)$expiresAt);
 	if ($expiresAt === '') {
-		return _('Unknown');
+		return '-';
 	}
 
 	$expiryTimestamp = strtotime($expiresAt);
 	if ($expiryTimestamp === false) {
-		return _('Unknown');
+		return '-';
 	}
 
 	$remainingSeconds = $expiryTimestamp - time();
@@ -172,10 +172,10 @@ $_rwDisplayContact = function ($value) {
 
 $_rwMapDetailRows = function ($registration) use ($_rwContactExpiryText, $_rwIsRegisteredNoQualify) {
 	return [
-		[_('Device IP'), ($registration['device_ip'] ?? '') !== '' ? (string)$registration['device_ip'] : _('Unknown')],
-		[_('Device Port'), ($registration['device_port'] ?? '') !== '' ? (string)$registration['device_port'] : _('Unknown')],
-		[_('Network IP'), ($registration['network_ip'] ?? '') !== '' ? (string)$registration['network_ip'] : _('Unknown')],
-		[_('Network Port'), ($registration['network_port'] ?? '') !== '' ? (string)$registration['network_port'] : _('Unknown')],
+		[_('Device IP'), ($registration['device_ip'] ?? '') !== '' ? (string)$registration['device_ip'] : '-'],
+		[_('Device Port'), ($registration['device_port'] ?? '') !== '' ? (string)$registration['device_port'] : '-'],
+		[_('Network IP'), ($registration['network_ip'] ?? '') !== '' ? (string)$registration['network_ip'] : '-'],
+		[_('Network Port'), ($registration['network_port'] ?? '') !== '' ? (string)$registration['network_port'] : '-'],
 		[_('Device'), ($registration['device_name'] ?? '') !== '' ? (string)$registration['device_name'] : '-'],
 		[_('Version'), ($registration['firmware_version'] ?? '') !== '' ? (string)$registration['firmware_version'] : '-'],
 		[_('Contact expires'), $_rwContactExpiryText($registration['contact_expires_at'] ?? '')],
@@ -596,6 +596,7 @@ $_rwAssetVer = max(
 		const textLatency = <?php echo json_encode(_('Latency')); ?>;
 		const textNoQualify = <?php echo json_encode(_('Unavailable; qualify is not enabled.')); ?>;
 		const textUnknown = <?php echo json_encode(_('Unknown')); ?>;
+		const textEmpty = '-';
 		const textExpired = <?php echo json_encode(_('Expired')); ?>;
 		let latestMapRegistrations = <?php echo json_encode($mapRegistrations); ?>;
 
@@ -665,12 +666,12 @@ $_rwAssetVer = max(
 
 		function contactExpiryText(expiresAt) {
 			if (!expiresAt) {
-				return textUnknown;
+				return textEmpty;
 			}
 
 			const expiryTime = Date.parse(String(expiresAt).replace(' ', 'T'));
 			if (Number.isNaN(expiryTime)) {
-				return textUnknown;
+				return textEmpty;
 			}
 
 			const remainingSeconds = Math.floor((expiryTime - Date.now()) / 1000);
@@ -683,14 +684,14 @@ $_rwAssetVer = max(
 
 		function mapDetailRows(registration, status) {
 			return [
-				[textDeviceIp, registration.device_ip || textUnknown],
-				[textDevicePort, registration.device_port || textUnknown],
-				[textNetworkIp, registration.network_ip || textUnknown],
-				[textNetworkPort, registration.network_port || textUnknown],
-				[textDevice, registration.device_name || '-'],
-				[textVersion, registration.firmware_version || '-'],
+				[textDeviceIp, registration.device_ip || textEmpty],
+				[textDevicePort, registration.device_port || textEmpty],
+				[textNetworkIp, registration.network_ip || textEmpty],
+				[textNetworkPort, registration.network_port || textEmpty],
+				[textDevice, registration.device_name || textEmpty],
+				[textVersion, registration.firmware_version || textEmpty],
 				[textContactExpires, contactExpiryText(registration.contact_expires_at)],
-				[textQualify, registration.qualify_frequency ? registration.qualify_frequency + ' seconds' : '-'],
+				[textQualify, registration.qualify_frequency ? registration.qualify_frequency + ' seconds' : textEmpty],
 				[textLatency, latencyText(registration, status)]
 			];
 		}

@@ -177,6 +177,15 @@
 		'</div>';
 	}
 
+	function watchedExtensionsEmptyText() {
+		var pollInterval = parseInt($('.registrationwatch').attr('data-poll-interval'), 10) || 0;
+		if (pollInterval > 0) {
+			return 'No watched extensions discovered yet. Registration Watch checks automatically every ' + pollInterval + ' seconds; extensions will appear here once discovered.';
+		}
+
+		return 'No watched extensions discovered yet. Registration Watch will show extensions here once automatic checks run.';
+	}
+
 	function watchedExtensionRowHtml(registration) {
 		var id = parseInt(registration.registration_id || registration.id, 10) || 0;
 		var notes = registration.notes || '';
@@ -227,7 +236,7 @@
 
 		var $body = $panel.find('.panel-body').first();
 		if (!rows.length) {
-			$body.html('<p class="rw-placeholder">No watched extensions discovered yet. Registration Watch checks automatically; extensions will appear here once discovered.</p>');
+			$body.html('<p class="rw-placeholder">' + escapeHtmlValue(watchedExtensionsEmptyText()) + '</p>');
 			$(document).trigger('registrationwatch:history-rendered');
 			return;
 		}

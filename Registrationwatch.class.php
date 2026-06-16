@@ -1471,7 +1471,7 @@ class Registrationwatch implements \BMO {
 			if (($detail['extension'] ?? '') !== $extension) {
 				continue;
 			}
-			if (!empty($detail['contact_uri']) && (string)$detail['contact_uri'] === (string)($contact['contact_uri'] ?? '')) {
+			if (!empty($detail['contact_uri']) && $this->contactUrisMatchForEnrichment($detail['contact_uri'], $contact['contact_uri'] ?? null)) {
 				$exactCandidate = $detail;
 				break;
 			}
@@ -1482,6 +1482,9 @@ class Registrationwatch implements \BMO {
 
 		if (is_array($exactCandidate)) {
 			$detail = $exactCandidate;
+			if (!empty($detail['contact_uri'])) {
+				$contact['contact_uri'] = (string)$detail['contact_uri'];
+			}
 			if (!empty($detail['source_ip'])) {
 				$contact['source_ip'] = $this->normaliseSourceIp($detail['source_ip']);
 			}
@@ -1511,6 +1514,39 @@ class Registrationwatch implements \BMO {
 		}
 
 		return $contact;
+	}
+
+	private function contactUrisMatchForEnrichment($left, $right): bool {
+		$left = trim((string)$left);
+		$right = trim((string)$right);
+		if ($left === '' || $right === '') {
+			return false;
+		}
+		if ($left === $right) {
+			return true;
+		}
+
+		$normalisedLeft = $this->normaliseContactUriForEnrichment($left);
+		$normalisedRight = $this->normaliseContactUriForEnrichment($right);
+
+		return $normalisedLeft !== '' && $normalisedLeft === $normalisedRight;
+	}
+
+	private function normaliseContactUriForEnrichment(string $contactUri): string {
+		$contactUri = trim($contactUri, " \t\n\r\0\x0B<>");
+		if ($contactUri === '') {
+			return '';
+		}
+
+		$contactUri = preg_split('/[;?&#>\s]/', $contactUri, 2)[0] ?? '';
+		$contactUri = trim($contactUri);
+		if (stripos($contactUri, 'sip:') === 0) {
+			$contactUri = substr($contactUri, 4);
+		} elseif (stripos($contactUri, 'sips:') === 0) {
+			$contactUri = substr($contactUri, 5);
+		}
+
+		return strtolower($contactUri);
 	}
 
 	private function getStoredRegistrationIdentityClasses(): array {
