@@ -191,7 +191,7 @@
 		var notes = registration.notes || '';
 		var notesStatus = registration.notes_updated_at ? 'Saved ' + registration.notes_updated_at : '';
 
-		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '">' +
+		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '"' + (parseInt(registration.enabled, 10) ? ' class="rw-row-enabled"' : '') + '>' +
 			'<td data-label="Monitored">' +
 				'<label class="rw-toggle">' +
 					'<input type="checkbox" class="rw-enabled"' + (parseInt(registration.enabled, 10) ? ' checked' : '') + '>' +
@@ -382,6 +382,7 @@
 				return;
 			}
 
+			row.toggleClass('rw-row-enabled', enabled === 1);
 			input.prop('disabled', true);
 			$.ajax({
 				url: 'ajax.php?module=registrationwatch',
@@ -396,12 +397,14 @@
 			}).done(function (response) {
 				if (!response || !response.status) {
 					input.prop('checked', !enabled);
+					row.toggleClass('rw-row-enabled', enabled === 0);
 					showMessage(response && response.message ? response.message : 'Unable to save watch setting.', 'error');
 				} else {
 					showMessage(response.message || 'Watch setting saved.', 'success');
 				}
 			}).fail(function () {
 				input.prop('checked', !enabled);
+				row.toggleClass('rw-row-enabled', enabled === 0);
 				showMessage('Unable to save watch setting.', 'error');
 			}).always(function () {
 				input.prop('disabled', false);

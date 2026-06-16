@@ -295,6 +295,14 @@
         width: 100%;
 }
 
+.registrationwatch .rw-watched-registrations-table > tbody > tr {
+        background-color: #fff;
+}
+
+.registrationwatch .rw-watched-registrations-table > tbody > tr.rw-row-enabled {
+        background-color: #dff0d8;
+}
+
 .registrationwatch .rw-watched-registrations-table > tbody > tr > td {
         padding-top: 9px;
         padding-bottom: 7px;
