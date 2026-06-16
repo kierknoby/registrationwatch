@@ -123,16 +123,20 @@
 	margin-right: 6px;
 }
 
-.registrationwatch .rw-history > tbody > tr {
+.registrationwatch .rw-history > tbody > tr > td {
 	background-color: #fff !important;
 }
 
-.registrationwatch .rw-history > tbody > tr.rw-history-row-ok {
+.registrationwatch .rw-history > tbody > tr.rw-history-row-ok > td {
 	background-color: #dff0d8 !important;
 }
 
-.registrationwatch .rw-history > tbody > tr.rw-history-row-bad {
+.registrationwatch .rw-history > tbody > tr.rw-history-row-bad > td {
 	background-color: #f2dede !important;
+}
+
+.registrationwatch .rw-history > tbody > tr.rw-history-row-neutral > td {
+	background-color: #fff !important;
 }
 
 .registrationwatch .rw-history-control-row {
@@ -307,18 +311,15 @@
         width: 100%;
 }
 
-.registrationwatch .rw-watched-registrations-table > tbody > tr {
-        background-color: #fff !important;
-}
-
-.registrationwatch .rw-watched-registrations-table > tbody > tr.rw-row-enabled {
-        background-color: #dff0d8 !important;
-}
-
 .registrationwatch .rw-watched-registrations-table > tbody > tr > td {
+        background-color: #fff !important;
         padding-top: 9px;
         padding-bottom: 7px;
         vertical-align: middle;
+}
+
+.registrationwatch .rw-watched-registrations-table > tbody > tr.rw-row-enabled > td {
+        background-color: #dff0d8 !important;
 }
 
 .registrationwatch .rw-watched-registrations-table > tbody > tr + tr > td {
