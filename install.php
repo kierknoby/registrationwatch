@@ -15,6 +15,7 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_registrations (
 	notes VARCHAR(48) NOT NULL DEFAULT '',
 	notes_updated_at DATETIME NULL,
 	enabled TINYINT(1) NOT NULL DEFAULT 1,
+	auto_disabled_absent_at DATETIME NULL,
 	repeat_mode VARCHAR(20) NULL,
 	discovered TINYINT(1) NOT NULL DEFAULT 1,
 	last_known_status VARCHAR(40) NOT NULL DEFAULT 'Unknown',
@@ -102,7 +103,8 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_history (
 	KEY registrationwatch_alert_history_alert_type (alert_type),
 	KEY registrationwatch_alert_history_recipient (recipient),
 	KEY registrationwatch_alert_history_sent_at (sent_at),
-	KEY registrationwatch_alert_history_result (result)
+	KEY registrationwatch_alert_history_result (result),
+	UNIQUE KEY registrationwatch_alert_unique_transition_recipient (history_id, alert_type, recipient(191), reminder_n)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_escalation (
@@ -132,158 +134,17 @@ foreach ($sql as $statement) {
 	$db->query($statement);
 }
 
-$columns = [
-	'registration_key' => "ALTER TABLE registrationwatch_registrations ADD registration_key CHAR(64) NOT NULL AFTER id",
-	'notes' => "ALTER TABLE registrationwatch_registrations ADD notes VARCHAR(48) NOT NULL DEFAULT '' AFTER description",
-	'notes_updated_at' => "ALTER TABLE registrationwatch_registrations ADD notes_updated_at DATETIME NULL AFTER notes",
-	'repeat_mode' => "ALTER TABLE registrationwatch_registrations ADD repeat_mode VARCHAR(20) NULL AFTER enabled",
-	'discovered' => "ALTER TABLE registrationwatch_registrations ADD discovered TINYINT(1) NOT NULL DEFAULT 1 AFTER enabled",
-	'last_known_status' => "ALTER TABLE registrationwatch_registrations ADD last_known_status VARCHAR(40) NOT NULL DEFAULT 'Unknown' AFTER discovered",
-	'contact_uri' => "ALTER TABLE registrationwatch_registrations ADD contact_uri TEXT NULL AFTER last_known_status",
-	'source_ip' => "ALTER TABLE registrationwatch_registrations ADD source_ip VARCHAR(45) NULL AFTER contact_uri",
-	'registration_ua_class' => "ALTER TABLE registrationwatch_registrations ADD registration_ua_class VARCHAR(191) NOT NULL DEFAULT '' AFTER source_ip",
-	'transport' => "ALTER TABLE registrationwatch_registrations ADD transport VARCHAR(20) NULL AFTER source_ip",
-	'user_agent' => "ALTER TABLE registrationwatch_registrations ADD user_agent VARCHAR(255) NULL AFTER transport",
-	'device_name' => "ALTER TABLE registrationwatch_registrations ADD device_name VARCHAR(255) NULL AFTER user_agent",
-	'firmware_version' => "ALTER TABLE registrationwatch_registrations ADD firmware_version VARCHAR(80) NULL AFTER device_name",
-	'source_port' => "ALTER TABLE registrationwatch_registrations ADD source_port INT UNSIGNED NULL AFTER firmware_version",
-	'contact_count' => "ALTER TABLE registrationwatch_registrations ADD contact_count INT UNSIGNED NOT NULL DEFAULT 1 AFTER source_port",
-	'contact_expires_at' => "ALTER TABLE registrationwatch_registrations ADD contact_expires_at DATETIME NULL AFTER source_port",
-	'qualify_frequency' => "ALTER TABLE registrationwatch_registrations ADD qualify_frequency INT UNSIGNED NULL AFTER contact_expires_at",
-	'last_heartbeat_at' => "ALTER TABLE registrationwatch_registrations ADD last_heartbeat_at DATETIME NULL AFTER qualify_frequency",
-	'latency_ms' => "ALTER TABLE registrationwatch_registrations ADD latency_ms DECIMAL(10,3) NULL AFTER last_heartbeat_at",
-	'last_seen_at' => "ALTER TABLE registrationwatch_registrations ADD last_seen_at DATETIME NULL AFTER latency_ms",
-	'last_checked_at' => "ALTER TABLE registrationwatch_registrations ADD last_checked_at DATETIME NULL AFTER last_seen_at",
-	'first_discovered_at' => "ALTER TABLE registrationwatch_registrations ADD first_discovered_at DATETIME NULL AFTER last_checked_at",
-	'last_discovered_at' => "ALTER TABLE registrationwatch_registrations ADD last_discovered_at DATETIME NULL AFTER first_discovered_at",
-];
-
-foreach ($columns as $column => $statement) {
-	$exists = $db->query("SHOW COLUMNS FROM registrationwatch_registrations LIKE '" . $column . "'");
-	$hasColumn = false;
-	if ($exists && method_exists($exists, 'fetchColumn')) {
-		$hasColumn = (bool)$exists->fetchColumn();
-	} elseif ($exists && method_exists($exists, 'fetchRow')) {
-		$hasColumn = (bool)$exists->fetchRow();
-	} elseif ($exists && method_exists($exists, 'numRows')) {
-		$hasColumn = $exists->numRows() > 0;
-	} elseif ($exists && method_exists($exists, 'rowCount')) {
-		$hasColumn = $exists->rowCount() > 0;
-	}
-	if ($hasColumn) {
-		continue;
-	}
-	$db->query($statement);
-}
-
-$indexName = 'registrationwatch_registrations_source_ip';
-$exists = $db->query("SHOW INDEX FROM registrationwatch_registrations WHERE Key_name = '" . $indexName . "'");
-$hasIndex = false;
-
-if ($exists && method_exists($exists, 'fetchColumn')) {
-	$hasIndex = (bool)$exists->fetchColumn();
-} elseif ($exists && method_exists($exists, 'fetchRow')) {
-	$hasIndex = (bool)$exists->fetchRow();
-} elseif ($exists && method_exists($exists, 'numRows')) {
-	$hasIndex = $exists->numRows() > 0;
-} elseif ($exists && method_exists($exists, 'rowCount')) {
-	$hasIndex = $exists->rowCount() > 0;
-}
-
-if (!$hasIndex) {
-	$db->query('ALTER TABLE registrationwatch_registrations ADD KEY registrationwatch_registrations_source_ip (source_ip)');
-}
-
-$alertColumns = [
-	'history_id' => "ALTER TABLE registrationwatch_alert_history ADD history_id BIGINT UNSIGNED NULL AFTER extension",
-	'reminder_n' => "ALTER TABLE registrationwatch_alert_history ADD reminder_n INT UNSIGNED NOT NULL DEFAULT 0 AFTER history_id",
-	'alert_type' => "ALTER TABLE registrationwatch_alert_history ADD alert_type VARCHAR(40) NOT NULL DEFAULT '' AFTER history_id",
-	'recipient' => "ALTER TABLE registrationwatch_alert_history ADD recipient VARCHAR(255) NOT NULL DEFAULT '' AFTER status",
-	'subject' => "ALTER TABLE registrationwatch_alert_history ADD subject VARCHAR(255) NOT NULL DEFAULT '' AFTER recipient",
-	'sent_at' => "ALTER TABLE registrationwatch_alert_history ADD sent_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:01' AFTER message",
-	'result' => "ALTER TABLE registrationwatch_alert_history ADD result VARCHAR(40) NOT NULL DEFAULT '' AFTER sent_at",
-	'error' => "ALTER TABLE registrationwatch_alert_history ADD error TEXT NULL AFTER result",
-];
-
-foreach ($alertColumns as $column => $statement) {
-	$exists = $db->query("SHOW COLUMNS FROM registrationwatch_alert_history LIKE '" . $column . "'");
-	$hasColumn = false;
-	if ($exists && method_exists($exists, 'fetchColumn')) {
-		$hasColumn = (bool)$exists->fetchColumn();
-	} elseif ($exists && method_exists($exists, 'fetchRow')) {
-		$hasColumn = (bool)$exists->fetchRow();
-	} elseif ($exists && method_exists($exists, 'numRows')) {
-		$hasColumn = $exists->numRows() > 0;
-	} elseif ($exists && method_exists($exists, 'rowCount')) {
-		$hasColumn = $exists->rowCount() > 0;
-	}
-	if ($hasColumn) {
-		continue;
-	}
-	$db->query($statement);
-}
-
-$alertIndexes = [
-	'registrationwatch_alert_history_history_id' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_history_id (history_id)',
-	'registrationwatch_alert_history_reminder_n' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_reminder_n (reminder_n)',
-	'registrationwatch_alert_history_alert_type' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_alert_type (alert_type)',
-	'registrationwatch_alert_history_recipient' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_recipient (recipient)',
-	'registrationwatch_alert_history_sent_at' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_sent_at (sent_at)',
-	'registrationwatch_alert_history_result' => 'ALTER TABLE registrationwatch_alert_history ADD KEY registrationwatch_alert_history_result (result)',
-];
-
-foreach ($alertIndexes as $index => $statement) {
-	$exists = $db->query("SHOW INDEX FROM registrationwatch_alert_history WHERE Key_name = '" . $index . "'");
-	$hasIndex = false;
-	if ($exists && method_exists($exists, 'fetchColumn')) {
-		$hasIndex = (bool)$exists->fetchColumn();
-	} elseif ($exists && method_exists($exists, 'fetchRow')) {
-		$hasIndex = (bool)$exists->fetchRow();
-	} elseif ($exists && method_exists($exists, 'numRows')) {
-		$hasIndex = $exists->numRows() > 0;
-	} elseif ($exists && method_exists($exists, 'rowCount')) {
-		$hasIndex = $exists->rowCount() > 0;
-	}
-	if ($hasIndex) {
-		continue;
-	}
-	$db->query($statement);
-}
-
-$uniqueAlertIndexName = 'registrationwatch_alert_unique_transition_recipient';
-$exists = $db->query("SHOW INDEX FROM registrationwatch_alert_history WHERE Key_name = '" . $uniqueAlertIndexName . "'");
-$hasIndex = false;
-
-if ($exists && method_exists($exists, 'fetchColumn')) {
-	$hasIndex = (bool)$exists->fetchColumn();
-} elseif ($exists && method_exists($exists, 'fetchRow')) {
-	$hasIndex = (bool)$exists->fetchRow();
-} elseif ($exists && method_exists($exists, 'numRows')) {
-	$hasIndex = $exists->numRows() > 0;
-} elseif ($exists && method_exists($exists, 'rowCount')) {
-	$hasIndex = $exists->rowCount() > 0;
-}
-
-if ($hasIndex) {
-	$db->query('ALTER TABLE registrationwatch_alert_history DROP INDEX registrationwatch_alert_unique_transition_recipient');
-}
-
-$db->query(
-	'ALTER TABLE registrationwatch_alert_history
-	 ADD UNIQUE KEY registrationwatch_alert_unique_transition_recipient
-	 (history_id, alert_type, recipient(191), reminder_n)'
-);
-
 $defaultSettings = [
 	'alert_enabled' => '0',
 	'alert_recipients' => '',
 	'repeat_mode' => 'never',
-	'storm_threshold' => '0',
+	'storm_threshold' => '20',
 	'ui_show_limit' => '6',
 	'alert_on_unreachable' => '1',
 	'alert_on_not_registered' => '1',
 	'alert_on_recovery' => '1',
 	'debounce_seconds' => '300',
+	'auto_disable_absent_seconds' => '2592000',
 	'trusted_vpn_networks' => '',
 	'topology_poll_interval_seconds' => '10',
 	'status_history_prune_policy' => 'never',

@@ -23,6 +23,7 @@ class Registrationwatch implements \BMO {
 	const CSRF_SESSION_KEY = 'registrationwatch_csrf_token';
 	const ALERT_TIMING_MAX_SECONDS = 86400;
 	const ALERT_STALE_TRANSITION_MAX_SECONDS = 300;
+	const AUTO_DISABLE_ABSENT_DEFAULT_SECONDS = 2592000;
 	const REPEAT_MODE_NEVER = 'never';
 	const REPEAT_MODE_FIVE_MINUTES = '5m';
 	const REPEAT_MODE_HOURLY = 'hourly';
@@ -46,12 +47,13 @@ class Registrationwatch implements \BMO {
 		'alert_enabled' => '0',
 		'alert_recipients' => '',
 		'repeat_mode' => self::REPEAT_MODE_NEVER,
-		'storm_threshold' => '0',
+		'storm_threshold' => '20',
 		'ui_show_limit' => '6',
 		'alert_on_unreachable' => '1',
 		'alert_on_not_registered' => '1',
 		'alert_on_recovery' => '1',
 		'debounce_seconds' => '300',
+		'auto_disable_absent_seconds' => '2592000',
 		'trusted_vpn_networks' => '',
 		'topology_poll_interval_seconds' => '10',
 		'status_history_prune_policy' => 'never',
@@ -136,13 +138,13 @@ class Registrationwatch implements \BMO {
 					}
 					$stmt = $db->prepare(
 						'INSERT INTO registrationwatch_registrations
-							(registration_key, registration_ua_class, extension, description, notes, notes_updated_at, enabled, repeat_mode, discovered, last_known_status, contact_uri,
+							(registration_key, registration_ua_class, extension, description, notes, notes_updated_at, enabled, auto_disabled_absent_at, repeat_mode, discovered, last_known_status, contact_uri,
 							 source_ip, source_port, contact_count, transport, user_agent, device_name, firmware_version,
 							 contact_expires_at, qualify_frequency, last_heartbeat_at, latency_ms,
 							 last_seen_at, last_checked_at, first_discovered_at, last_discovered_at,
 							 created_at, updated_at)
 						VALUES
-							(:registration_key, :registration_ua_class, :extension, :description, :notes, :notes_updated_at, :enabled, :repeat_mode, :discovered, :last_known_status, :contact_uri,
+							(:registration_key, :registration_ua_class, :extension, :description, :notes, :notes_updated_at, :enabled, :auto_disabled_absent_at, :repeat_mode, :discovered, :last_known_status, :contact_uri,
 							 :source_ip, :source_port, :contact_count, :transport, :user_agent, :device_name, :firmware_version,
 							 :contact_expires_at, :qualify_frequency, :last_heartbeat_at, :latency_ms,
 							 :last_seen_at, :last_checked_at, :first_discovered_at, :last_discovered_at,
@@ -152,6 +154,7 @@ class Registrationwatch implements \BMO {
 							notes = VALUES(notes),
 							notes_updated_at = VALUES(notes_updated_at),
 							enabled = VALUES(enabled),
+							auto_disabled_absent_at = VALUES(auto_disabled_absent_at),
 							repeat_mode = VALUES(repeat_mode),
 							last_known_status = VALUES(last_known_status),
 							contact_uri = VALUES(contact_uri),
@@ -180,6 +183,7 @@ class Registrationwatch implements \BMO {
 						':notes' => isset($row['notes']) ? substr((string)$row['notes'], 0, 48) : '',
 						':notes_updated_at' => $row['notes_updated_at'] ?? null,
 						':enabled' => $row['enabled'] ?? 1,
+						':auto_disabled_absent_at' => $row['auto_disabled_absent_at'] ?? null,
 						':repeat_mode' => isset($row['repeat_mode']) && $row['repeat_mode'] !== null && $row['repeat_mode'] !== ''
 							? $this->normaliseRepeatMode((string)$row['repeat_mode'])
 							: null,
@@ -761,6 +765,8 @@ class Registrationwatch implements \BMO {
 					'UPDATE registrationwatch_registrations
 					SET description = :description,
 						discovered = 1,
+						enabled = CASE WHEN auto_disabled_absent_at IS NOT NULL THEN 1 ELSE enabled END,
+						auto_disabled_absent_at = NULL,
 						contact_uri = :contact_uri,
 						source_ip = :source_ip,
 						source_port = :source_port,
@@ -830,50 +836,6 @@ class Registrationwatch implements \BMO {
 		}
 	}
 
-	private function discoverPjsipRegistrations(): array {
-		if (!$this->tableExists('devices') && !$this->tableExists('users')) {
-			return [];
-		}
-
-		// FreePBX/PBXact 17 does not always store keyword=type/data=endpoint
-		// rows in pjsip. Treat pjsip rows as supporting evidence only; the
-		// FreePBX devices table is the authoritative source for extension devices.
-		$pjsipRegistrationTargets = $this->getPjsipRegistrationTargets();
-		$descriptions = $this->getRegistrationDescriptions();
-		$seen = [];
-		$registrations = [];
-		$ids = [];
-
-		if ($this->tableExists('devices')) {
-			$stmt = $this->db()->query("SELECT id FROM devices WHERE LOWER(tech) = 'pjsip' AND id <> '' ORDER BY id");
-			$ids = $stmt ? $stmt->fetchAll(\PDO::FETCH_COLUMN, 0) : [];
-		}
-
-		if (!$ids && $this->tableExists('users')) {
-			$stmt = $this->db()->query("SELECT extension FROM users WHERE extension <> '' ORDER BY extension");
-			$ids = $stmt ? $stmt->fetchAll(\PDO::FETCH_COLUMN, 0) : [];
-			if ($pjsipRegistrationTargets) {
-				$ids = array_filter($ids, function ($id) use ($pjsipRegistrationTargets) {
-					return isset($pjsipRegistrationTargets[trim((string)$id)]);
-				});
-			}
-		}
-
-		foreach ($ids as $id) {
-			$extension = trim((string)$id);
-			if ($extension === '' || isset($seen[$extension])) {
-				continue;
-			}
-			$seen[$extension] = true;
-			$registrations[] = [
-				'extension' => $extension,
-				'description' => $descriptions[$extension] ?? '',
-			];
-		}
-
-		return $registrations;
-	}
-
 	private function getPjsipRegistrationTargets(): array {
 		if (!$this->tableExists('pjsip')) {
 			return [];
@@ -918,11 +880,26 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function reconcileCurrentStatus(): void {
+		if (!$this->acquireReconcileLock()) {
+			$this->logWarning('Registration Watch reconcile skipped because another reconcile is already running.');
+			return;
+		}
+
+		try {
+			$this->reconcileCurrentStatusLocked();
+		} finally {
+			$this->releaseReconcileLock();
+		}
+	}
+
+	private function reconcileCurrentStatusLocked(): void {
 		$contacts = $this->getLiveContacts();
 		$this->syncDiscoveredRegistrations($contacts);
 		$now = $this->now();
 		$db = $this->db();
 		$registrations = $this->getStoredRegistrations();
+		$settings = $this->getAlertSettings();
+		$autoDisableAbsentSeconds = $this->autoDisableAbsentSeconds($settings);
 
 		foreach ($registrations as $registration) {
 			if ((int)$registration['discovered'] === 0) {
@@ -948,6 +925,8 @@ class Registrationwatch implements \BMO {
 			$contactCount = max(1, (int)($registration['contact_count'] ?? 1));
 			$registrationUaClass = $registration['registration_ua_class'] ?? '';
 			$lastSeen = $registration['last_seen_at'] ?: null;
+			$enabled = (int)($registration['enabled'] ?? 0);
+			$autoDisabledAbsentAt = $registration['auto_disabled_absent_at'] ?? null;
 
 			if ($contact !== null) {
 				$status = $contact['status'];
@@ -965,6 +944,14 @@ class Registrationwatch implements \BMO {
 				if ($contactUri !== '') {
 					$lastSeen = $now;
 				}
+				if ($autoDisabledAbsentAt !== null && $autoDisabledAbsentAt !== '') {
+					$enabled = 1;
+					$autoDisabledAbsentAt = null;
+				}
+			} elseif ($this->shouldAutoDisableAbsentRegistration($registration, $autoDisableAbsentSeconds, $now)) {
+				$enabled = 0;
+				$autoDisabledAbsentAt = $autoDisabledAbsentAt ?: $now;
+				$this->deleteEscalationsForRegistration($registrationId);
 			}
 
 			if ($previousStatus !== $status) {
@@ -989,6 +976,8 @@ class Registrationwatch implements \BMO {
 			$stmt = $db->prepare(
 				'UPDATE registrationwatch_registrations
 				SET last_known_status = :last_known_status,
+					enabled = :enabled,
+					auto_disabled_absent_at = :auto_disabled_absent_at,
 					contact_uri = :contact_uri,
 					latency_ms = :latency_ms,
 					source_ip = :source_ip,
@@ -1007,6 +996,8 @@ class Registrationwatch implements \BMO {
 			);
 			$stmt->execute([
 				':last_known_status' => $status,
+				':enabled' => $enabled,
+				':auto_disabled_absent_at' => $autoDisabledAbsentAt,
 				':contact_uri' => $contactUri,
 				':latency_ms' => $latency,
 				':source_ip' => $sourceIp,
@@ -1026,6 +1017,57 @@ class Registrationwatch implements \BMO {
 		}
 
 		$this->processAlertQueue($now);
+	}
+
+	private function acquireReconcileLock(): bool {
+		try {
+			$stmt = $this->db()->query("SELECT GET_LOCK('registrationwatch_reconcile', 0)");
+			return $stmt ? (int)$stmt->fetchColumn() === 1 : false;
+		} catch (\Throwable $e) {
+			$this->logWarning('Registration Watch reconcile lock unavailable: ' . $e->getMessage());
+			return false;
+		}
+	}
+
+	private function releaseReconcileLock(): void {
+		try {
+			$this->db()->query("SELECT RELEASE_LOCK('registrationwatch_reconcile')");
+		} catch (\Throwable $e) {
+			$this->logWarning('Registration Watch reconcile lock release failed: ' . $e->getMessage());
+		}
+	}
+
+	private function autoDisableAbsentSeconds(array $settings): int {
+		$value = isset($settings['auto_disable_absent_seconds'])
+			? trim((string)$settings['auto_disable_absent_seconds'])
+			: (string)self::AUTO_DISABLE_ABSENT_DEFAULT_SECONDS;
+		if ($value === '' || !ctype_digit($value)) {
+			return self::AUTO_DISABLE_ABSENT_DEFAULT_SECONDS;
+		}
+
+		return max(0, (int)$value);
+	}
+
+	private function shouldAutoDisableAbsentRegistration(array $registration, int $thresholdSeconds, string $now): bool {
+		if ($thresholdSeconds <= 0 || (int)($registration['enabled'] ?? 0) !== 1) {
+			return false;
+		}
+		if (!empty($registration['auto_disabled_absent_at'])) {
+			return false;
+		}
+
+		$lastSeen = trim((string)($registration['last_seen_at'] ?? ''));
+		if ($lastSeen === '') {
+			return false;
+		}
+
+		$lastSeenTs = strtotime($lastSeen);
+		$nowTs = strtotime($now);
+		if ($lastSeenTs === false || $nowTs === false) {
+			return false;
+		}
+
+		return ($nowTs - $lastSeenTs) >= $thresholdSeconds;
 	}
 
 	private function getLiveContacts(): array {
@@ -1063,6 +1105,10 @@ class Registrationwatch implements \BMO {
 
 			$parsedCount++;
 			$parsed = $this->enrichLiveContactFromRegistrar($parsed, $registrarDetails);
+			if ($this->normaliseSourceIp($parsed['source_ip'] ?? '') === '') {
+				$this->logWarning('PJSIP contact skipped because Registration Watch could not resolve a source IP: ' . substr($line, 0, 100));
+				continue;
+			}
 			$identityGroup = $this->registrationIdentityGroupKey($parsed['extension'], $parsed['source_ip']);
 			$pending[$identityGroup][] = $parsed;
 		}
@@ -1170,7 +1216,8 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function enrichLiveContactFromRegistrar(array $contact, array $registrarDetails): array {
-		$candidates = [];
+		$exactCandidate = null;
+		$fallbackCandidates = [];
 		$extension = (string)($contact['extension'] ?? '');
 
 		foreach ($registrarDetails as $detail) {
@@ -1178,19 +1225,35 @@ class Registrationwatch implements \BMO {
 				continue;
 			}
 			if (!empty($detail['contact_uri']) && (string)$detail['contact_uri'] === (string)($contact['contact_uri'] ?? '')) {
-				array_unshift($candidates, $detail);
+				$exactCandidate = $detail;
 				break;
 			}
 			if (!empty($detail['source_ip']) && $this->normaliseSourceIp($detail['source_ip']) === (string)($contact['source_ip'] ?? '')) {
-				$candidates[] = $detail;
+				$fallbackCandidates[] = $detail;
 			}
 		}
 
-		foreach ($candidates as $detail) {
+		if (is_array($exactCandidate)) {
+			$detail = $exactCandidate;
+			if (!empty($detail['source_ip'])) {
+				$contact['source_ip'] = $this->normaliseSourceIp($detail['source_ip']);
+			}
+			foreach (['user_agent', 'device_name', 'firmware_version', 'contact_expires_at', 'qualify_frequency'] as $field) {
+				if (($contact[$field] ?? null) === null && ($detail[$field] ?? null) !== null && $detail[$field] !== '') {
+					$contact[$field] = $detail[$field];
+				}
+			}
+			if (($detail['source_port'] ?? null) !== null) {
+				$contact['source_port'] = $detail['source_port'];
+			}
+			return $contact;
+		}
+
+		foreach ($fallbackCandidates as $detail) {
 			if (!is_array($detail)) {
 				continue;
 			}
-			foreach (['user_agent', 'device_name', 'firmware_version', 'contact_expires_at', 'qualify_frequency'] as $field) {
+			foreach (['contact_expires_at', 'qualify_frequency'] as $field) {
 				if (($contact[$field] ?? null) === null && ($detail[$field] ?? null) !== null && $detail[$field] !== '') {
 					$contact[$field] = $detail[$field];
 				}
@@ -1277,18 +1340,16 @@ class Registrationwatch implements \BMO {
 		$contactAddress = $this->parseContactUriAddress($contactUri);
 		$contactHost = $contactAddress['host'];
 		$sourceIp = $this->normaliseSourceIp($contactHost);
-		if ($sourceIp === '') {
-			return null;
-		}
 
 		return [
-			'registration_key' => $this->registrationKey($extension, $sourceIp),
+			'registration_key' => '',
 			'registration_ua_class' => '',
 			'extension' => $extension,
 			'contact_uri' => $contactUri,
 			'status' => $this->mapAsteriskStatus($rawStatus),
 			'latency_ms' => $latency,
 			'source_ip' => $sourceIp,
+			'parsed_contact_host' => $contactHost,
 			'source_port' => $contactAddress['port'],
 			'contact_count' => 1,
 			'transport' => null,  // Not available from "pjsip show contacts"; requires future AMI/log ingestion
@@ -2123,7 +2184,7 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function stormThreshold(array $settings): int {
-		$value = isset($settings['storm_threshold']) ? trim((string)$settings['storm_threshold']) : '0';
+		$value = isset($settings['storm_threshold']) ? trim((string)$settings['storm_threshold']) : $this->settingsDefaults['storm_threshold'];
 		if ($value === '' || !ctype_digit($value)) {
 			return 0;
 		}
@@ -2182,7 +2243,7 @@ class Registrationwatch implements \BMO {
 			_('Registration Watch Storm Summary'),
 			'',
 			sprintf(_('%d alert emails were suppressed in this processing pass.'), $total),
-			_('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection.'),
+			_('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. The count is per registration, not per extension, so an extension with several devices can contribute several alerts. Use 0 to disable.'),
 			'',
 			'Time: ' . $now,
 			'',
@@ -2428,7 +2489,7 @@ class Registrationwatch implements \BMO {
 	private function getStoredRegistrations(): array {
 		$stmt = $this->db()->query(
 			'SELECT id, registration_key, registration_ua_class, extension, description, notes, notes_updated_at,
-				enabled, repeat_mode, discovered, last_known_status, contact_uri,
+				enabled, auto_disabled_absent_at, repeat_mode, discovered, last_known_status, contact_uri,
 				source_ip, source_port, contact_count, transport, user_agent, device_name, firmware_version,
 				contact_expires_at, qualify_frequency, last_heartbeat_at, latency_ms, last_seen_at,
 				last_checked_at, first_discovered_at, last_discovered_at

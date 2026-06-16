@@ -93,11 +93,6 @@
 		});
 	}
 
-	function setToggleText(input) {
-		var label = input.closest('.rw-toggle').find('span');
-		label.text(input.is(':checked') ? 'Selected' : 'Not selected');
-	}
-
 	function renderStatusRows(registrations) {
 		$.each(registrations || [], function (_, registration) {
 			var rows = registrationRows(registration.registration_id || registration.id);
@@ -223,10 +218,6 @@
 		$('#rw-alert-enabled, #rw-alert-recipients, #rw-alert-on-unreachable, #rw-alert-on-not-registered, #rw-alert-on-recovery, #rw-debounce-seconds, #rw-repeat-mode, #rw-storm-threshold')
 			.on('input change', markAlertSettingsDirty);
 
-		$('.rw-enabled').each(function () {
-			setToggleText($(this));
-		});
-
 		$('.registrationwatch').on('change', '.rw-enabled', function () {
 			var input = $(this);
 			var row = input.closest('tr');
@@ -236,7 +227,6 @@
 
 			if (!token) {
 				input.prop('checked', !enabled);
-				setToggleText(input);
 				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
 				return;
 			}
@@ -259,10 +249,8 @@
 				} else {
 					showMessage(response.message || 'Watch setting saved.', 'success');
 				}
-				setToggleText(input);
 			}).fail(function () {
 				input.prop('checked', !enabled);
-				setToggleText(input);
 				showMessage('Unable to save watch setting.', 'error');
 			}).always(function () {
 				input.prop('disabled', false);

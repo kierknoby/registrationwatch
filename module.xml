@@ -7,7 +7,7 @@
 	<license>GPLv3+</license>
 	<licenselink>http://www.gnu.org/licenses/gpl-3.0.txt</licenselink>
 	<changelog>
-		*1.2.0* Initial Registration Watch release for FreePBX 17. Adds SIP registration status visibility, status history, alert history, and email alerting for watched extensions.
+		*1.2.0* Initial Registration Watch release for FreePBX 17. Adds SIP registration status visibility, status history, alert history, and email alerting for watched registrations. Sets Storm Threshold to 20 by default, with 0 available to disable it. Adds reconcile locking and auto-disables registrations that remain absent for 30 days.
 	</changelog>
 	<category>Reports</category>
 	<description>Registration Watch provides SIP registration status visibility, history, and alerting through FreePBX reconciliation jobs.</description>

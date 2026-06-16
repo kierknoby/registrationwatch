@@ -76,6 +76,44 @@ function resolve_identity_group(array $items, array $existingState = []): array 
 	return $items;
 }
 
+function enrich_for_identity_contract(array $contact, array $registrarDetails): array {
+	$exact = null;
+	$fallback = [];
+	foreach ($registrarDetails as $detail) {
+		if (($detail['extension'] ?? '') !== ($contact['extension'] ?? '')) {
+			continue;
+		}
+		if (($detail['contact_uri'] ?? '') !== '' && $detail['contact_uri'] === ($contact['contact_uri'] ?? '')) {
+			$exact = $detail;
+			break;
+		}
+		if (($detail['source_ip'] ?? '') !== '' && $detail['source_ip'] === ($contact['source_ip'] ?? '')) {
+			$fallback[] = $detail;
+		}
+	}
+
+	if (is_array($exact)) {
+		$contact['source_ip'] = $exact['source_ip'] ?: $contact['source_ip'];
+		$contact['user_agent'] = $exact['user_agent'] ?? $contact['user_agent'];
+		return $contact;
+	}
+
+	foreach ($fallback as $detail) {
+		$contact['contact_expires_at'] = $detail['contact_expires_at'] ?? ($contact['contact_expires_at'] ?? null);
+	}
+
+	return $contact;
+}
+
+function should_auto_disable_absent(array $registration, int $thresholdSeconds, string $now): bool {
+	if ($thresholdSeconds <= 0 || (int)($registration['enabled'] ?? 0) !== 1 || !empty($registration['auto_disabled_absent_at'])) {
+		return false;
+	}
+	$lastSeen = strtotime((string)($registration['last_seen_at'] ?? ''));
+	$nowTs = strtotime($now);
+	return $lastSeen !== false && $nowTs !== false && ($nowTs - $lastSeen) >= $thresholdSeconds;
+}
+
 function escalating_interval_seconds(int $alertCount): int {
 	$steps = [300, 900, 3600, 14400, 86400];
 	return $steps[min(max(0, $alertCount - 1), count($steps) - 1)];
@@ -202,8 +240,10 @@ $db->exec(
 		source_ip TEXT NOT NULL,
 		registration_ua_class TEXT NOT NULL DEFAULT "",
 		enabled INTEGER NOT NULL,
+		auto_disabled_absent_at TEXT,
 		repeat_mode TEXT,
-		last_known_status TEXT NOT NULL
+		last_known_status TEXT NOT NULL,
+		last_seen_at TEXT
 	)'
 );
 
@@ -288,11 +328,98 @@ $anchored = resolve_identity_group([
 assert_true($anchored[0]['registration_ua_class'] === '', 'incumbent shared registration should keep bare key on later conflict');
 assert_true($anchored[1]['registration_ua_class'] === 'phoneb', 'conflicting newcomer should get suffixed key');
 
+$natContact = enrich_for_identity_contract(
+	[
+		'extension' => '2003',
+		'contact_uri' => 'sip:2003@10.0.0.44:5060',
+		'source_ip' => '10.0.0.44',
+		'user_agent' => null,
+	],
+	[
+		[
+			'extension' => '2003',
+			'contact_uri' => 'sip:2003@10.0.0.44:5060',
+			'source_ip' => '198.51.100.44',
+			'user_agent' => 'NatPhone/7',
+		],
+	]
+);
+$natResolved = resolve_identity_group([$natContact]);
+assert_true($natResolved[0]['source_ip'] === '198.51.100.44', 'exact registrar via_addr should replace parsed contact host before identity');
+assert_true($natResolved[0]['registration_key'] === registration_key('2003', '198.51.100.44'), 'NAT registration should key on authoritative via_addr');
+
+$fallbackContact = enrich_for_identity_contract(
+	[
+		'extension' => '2004',
+		'contact_uri' => 'sip:2004@198.51.100.55:5060',
+		'source_ip' => '198.51.100.55',
+		'user_agent' => null,
+	],
+	[
+		[
+			'extension' => '2004',
+			'contact_uri' => 'sip:2004@198.51.100.55:5099',
+			'source_ip' => '198.51.100.55',
+			'user_agent' => 'SiblingPhone/9',
+			'contact_expires_at' => '2026-06-15 11:00:00',
+		],
+	]
+);
+assert_true(($fallbackContact['user_agent'] ?? null) === null, 'fallback enrichment must not copy a sibling UA into identity');
+
 $storm = storm_contract_decision([
 	['registration_id' => $regA, 'extension' => '2001', 'recipient' => 'admin@example.invalid'],
 	['registration_id' => $regB, 'extension' => '2001', 'recipient' => 'admin@example.invalid'],
 ], 2);
 assert_true(count($storm['summaries']) === 1 && count($storm['individuals']) === 0, 'storm threshold should count sibling registrations separately');
+
+$lockHeld = false;
+$historyRows = 0;
+$db->exec(
+	'CREATE TABLE registrationwatch_reconcile_contract_history (
+		registration_id INTEGER NOT NULL,
+		from_state TEXT NOT NULL,
+		to_state TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		UNIQUE (registration_id, from_state, to_state)
+	)'
+);
+$reconcileOnce = function () use (&$lockHeld, &$historyRows): void {
+	if ($lockHeld) {
+		return;
+	}
+	$lockHeld = true;
+	try {
+		if ($historyRows === 0) {
+			$historyRows++;
+		}
+	} finally {
+		$lockHeld = false;
+	}
+};
+$lockHeld = true;
+$reconcileOnce();
+assert_true($historyRows === 0, 'second reconcile should skip while the reconcile lock is held');
+$lockHeld = false;
+$reconcileOnce();
+$reconcileOnce();
+assert_true($historyRows === 1, 'serial reconciles should not duplicate one transition row once state has advanced');
+$insertTransition = $db->prepare(
+	'INSERT OR IGNORE INTO registrationwatch_reconcile_contract_history
+		(registration_id, from_state, to_state, created_at)
+	VALUES (?, ?, ?, ?)'
+);
+$insertTransition->execute([$regB, 'Reachable', 'Not registered', '2026-06-15 10:00:00']);
+$insertTransition->execute([$regB, 'Reachable', 'Not registered', '2026-06-15 10:00:00']);
+assert_true((int)$db->query('SELECT COUNT(*) FROM registrationwatch_reconcile_contract_history')->fetchColumn() === 1, 'locked reconcile contract should produce one transition history row for one state change');
+
+$db->exec("UPDATE registrationwatch_registrations SET enabled = 1, auto_disabled_absent_at = NULL, last_seen_at = '2026-05-01 00:00:00', last_known_status = 'Not registered' WHERE id = {$regB}");
+$absent = $db->query("SELECT enabled, auto_disabled_absent_at, last_seen_at FROM registrationwatch_registrations WHERE id = {$regB}")->fetch(PDO::FETCH_ASSOC);
+assert_true(should_auto_disable_absent($absent, 2592000, '2026-06-15 10:00:00'), 'registration absent beyond threshold should qualify for auto-disable');
+$db->prepare('UPDATE registrationwatch_registrations SET enabled = 0, auto_disabled_absent_at = ? WHERE id = ?')->execute(['2026-06-15 10:00:00', $regB]);
+assert_true((int)$db->query("SELECT enabled FROM registrationwatch_registrations WHERE id = {$regB}")->fetchColumn() === 0, 'auto-disabled absent registration should stop alert eligibility');
+$db->prepare('UPDATE registrationwatch_registrations SET enabled = CASE WHEN auto_disabled_absent_at IS NOT NULL THEN 1 ELSE enabled END, auto_disabled_absent_at = NULL WHERE id = ?')->execute([$regB]);
+assert_true((int)$db->query("SELECT enabled FROM registrationwatch_registrations WHERE id = {$regB}")->fetchColumn() === 1, 'returning auto-disabled registration should re-enable automatically');
 
 assert_true(escalating_interval_seconds(1) === 300, 'escalating reminder 1 should wait 5 minutes');
 assert_true(escalating_interval_seconds(6) === 86400, 'escalating should hold at daily after exhaustion');

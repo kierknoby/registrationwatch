@@ -133,7 +133,8 @@ Defaults:
 * Alert on recovery enabled
 * Debounce seconds: `300`, maximum `86400`
 * Repeat alerts: `Never`
-* Storm Threshold: `0`, disabled
+* Storm Threshold: `20`
+* Auto-disable absent registrations: `2592000` seconds, 30 days
 
 Alertable transitions:
 
@@ -163,8 +164,14 @@ protection.
 
 Storm Threshold limits large batches of alerts generated in the same processing
 pass. It reduces email floods from sudden widespread registration changes, but
-it is not full correlated-outage detection. The threshold counts registration
-alerts in the pass, not extension groups.
+it is not full correlated-outage detection. The count is per registration, not
+per extension, so an extension with several devices can contribute several
+alerts. Use 0 to disable.
+
+Watched registrations that have been continuously absent for 30 days are
+auto-disabled to stop stale devices from alerting forever. They remain visible
+in the Watched Registrations table and are re-enabled automatically if the same
+registration returns.
 
 Email sending uses FreePBX/CodeIgniter mail support. Registration Watch does not
 use raw PHP `mail()` fallback. A successful local mailer handoff means the
@@ -193,8 +200,9 @@ Granular FreePBX ACL integration is still future work.
 * Email delivery depends on the PBX mail sender and relay setup.
 * Registration Watch identifies watched registrations by extension and source
   IP. Multiple contacts for the same extension from the same source IP are
-  treated as one watched registration. Contact URI and port are shown as detail
-  and may change as the device re-registers.
+  treated as one watched registration unless conflicting user-agents are present,
+  in which case they are split into separate watched registrations. Contact URI
+  and port are shown as detail and may change as the device re-registers.
 
 ## Validation
 
