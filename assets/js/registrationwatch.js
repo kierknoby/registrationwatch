@@ -795,7 +795,7 @@
 
 	        function installTableControls() {
 	                [
-	                        ['watched', 'Watched Registrations'],
+	                        ['watched', 'Watched Extensions'],
 	                        ['status-history', 'Status History'],
 	                        ['alert-history', 'Alert History']
                 ].forEach(function(item) {
@@ -844,7 +844,7 @@
         }
 
         function applyAllLimits(triggerMapChange) {
-                ['Watched Registrations', 'Status History', 'Alert History'].forEach(function(title) {
+                ['Watched Extensions', 'Status History', 'Alert History'].forEach(function(title) {
                         var $panel = panelByTitle(title);
                         if ($panel.length) {
                                 applyTableLimit($panel);

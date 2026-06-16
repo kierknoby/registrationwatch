@@ -114,9 +114,10 @@
 }
 
 .registrationwatch .rw-registration-map {
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 	gap: 12px;
+	align-items: start;
 }
 
 .registrationwatch .rw-extension-heading {
@@ -126,7 +127,7 @@
 
 .registrationwatch .rw-extension-registrations {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	grid-template-columns: minmax(0, 1fr);
 	gap: 12px;
 }
 
@@ -253,23 +254,23 @@
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-selection {
-        width: 72px;
+        width: 58px;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-extension {
-        width: 100px;
+        width: 88px;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-description {
-        width: 18%;
+        width: 14%;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-repeat {
-        width: 22%;
+        width: 18%;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-notes {
-        width: auto;
+        width: 44%;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-registration-notes,

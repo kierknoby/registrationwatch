@@ -57,8 +57,8 @@ $timeDiagnostics = isset($timeDiagnostics) && is_array($timeDiagnostics) ? $time
 ];
 $pollIntervalSeconds = isset($pollIntervalSeconds) ? (int)$pollIntervalSeconds : 10;
 $registrationEmptyText = $pollIntervalSeconds > 0
-	? sprintf(_('No watched registrations discovered yet. Registration Watch checks automatically every %d seconds; registration sources will appear here once discovered.'), $pollIntervalSeconds)
-	: _('No watched registrations discovered yet. Registration Watch will show registration sources here once automatic checks run.');
+	? sprintf(_('No watched extensions discovered yet. Registration Watch checks automatically every %d seconds; extensions will appear here once discovered.'), $pollIntervalSeconds)
+	: _('No watched extensions discovered yet. Registration Watch will show extensions here once automatic checks run.');
 $csrfToken = isset($csrfToken) ? (string)$csrfToken : '';
 $repeatModeOptions = [
 	'never' => _('Never'),
@@ -168,6 +168,69 @@ $_rwDisplayContact = function ($value) {
 	return $value !== '' ? $value : '-';
 };
 
+$_rwMapDetailRows = function ($registration) use ($_rwDisplayContact, $_rwContactExpiryText, $_rwIsRegisteredNoQualify) {
+	$status = strtolower(trim((string)($registration['last_known_status'] ?? $registration['status'] ?? '')));
+	$isNotRegistered = $status === 'not registered' || $status === 'not_registered';
+	$rows = [];
+	$contact = $_rwDisplayContact($registration['contact_uri'] ?? '');
+
+	if ($isNotRegistered) {
+		if (trim((string)($registration['source_ip'] ?? '')) !== '') {
+			$rows[] = [_('Last known IP'), (string)$registration['source_ip']];
+		}
+		if (trim((string)($registration['source_port'] ?? '')) !== '') {
+			$rows[] = [_('Last known port'), (string)$registration['source_port']];
+		}
+		if ($contact !== '-') {
+			$rows[] = [_('Last known contact'), $contact];
+		}
+
+		return $rows;
+	}
+
+	$observedIp = trim((string)($registration['network_ip'] ?? ''));
+	if ($observedIp === '') {
+		$observedIp = trim((string)($registration['source_ip'] ?? ''));
+	}
+	if ($observedIp !== '') {
+		$rows[] = [_('Observed IP'), $observedIp];
+	}
+
+	$observedPort = trim((string)($registration['network_port'] ?? ''));
+	if ($observedPort === '') {
+		$observedPort = trim((string)($registration['source_port'] ?? ''));
+	}
+	if ($observedPort !== '') {
+		$rows[] = [_('Port'), $observedPort];
+	}
+
+	if (trim((string)($registration['device_name'] ?? '')) !== '') {
+		$rows[] = [_('Device'), (string)$registration['device_name']];
+	}
+	if (trim((string)($registration['firmware_version'] ?? '')) !== '') {
+		$rows[] = [_('Version'), (string)$registration['firmware_version']];
+	}
+	if ($contact !== '-') {
+		$rows[] = [_('Contact'), $contact];
+	}
+	if (trim((string)($registration['contact_expires_at'] ?? '')) !== '') {
+		$expiryText = $_rwContactExpiryText($registration['contact_expires_at']);
+		if ($expiryText !== _('Unknown')) {
+			$rows[] = [_('Contact expires'), $expiryText];
+		}
+	}
+	if (trim((string)($registration['qualify_frequency'] ?? '')) !== '') {
+		$rows[] = [_('Qualify'), (string)$registration['qualify_frequency'] . ' ' . _('seconds')];
+	}
+	if (($registration['latency_ms'] ?? null) !== null && $registration['latency_ms'] !== '') {
+		$rows[] = [_('Latency'), (string)$registration['latency_ms'] . ' ms'];
+	} elseif ($_rwIsRegisteredNoQualify($registration['last_known_status'] ?? '')) {
+		$rows[] = [_('Latency'), _('Unavailable; qualify is not enabled.')];
+	}
+
+	return $rows;
+};
+
 $_rwAssetVer = max(
 	@filemtime(__DIR__ . '/../assets/js/registrationwatch.js') ?: 0,
 	@filemtime(__DIR__ . '/../assets/css/registrationwatch.css') ?: 0
@@ -215,7 +278,7 @@ $_rwAssetVer = max(
 								<option value="all" <?php echo $uiShowLimit === 'all' ? 'selected' : ''; ?>><?php echo _('All'); ?></option>
 							</select>
 							<span id="rw-map-count" class="text-muted" style="margin-left: 10px;">
-								<?php echo sprintf(_('Showing %d of %d watched registrations'), $mapVisibleCount, $mapRegistrationTotal); ?>
+								<?php echo sprintf(_('Showing %d of %d watched extensions'), $mapVisibleCount, $mapRegistrationTotal); ?>
 							</span>
 						</div>
 					<div id="rw-topology-container" style="min-height: 200px;">
@@ -240,27 +303,13 @@ $_rwAssetVer = max(
 														<span class="rw-led <?php echo $_rwStatusClass($registration['last_known_status']); ?>"></span>
 														<span><?php echo htmlspecialchars((string)$registration['extension'], ENT_QUOTES, 'UTF-8'); ?></span>
 													</div>
-													<div class="rw-map-description"><?php echo htmlspecialchars($registration['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></div>
+													<?php if (trim((string)($registration['description'] ?? '')) !== ''): ?>
+														<div class="rw-map-description"><?php echo htmlspecialchars($registration['description'], ENT_QUOTES, 'UTF-8'); ?></div>
+													<?php endif; ?>
 													<div class="rw-map-status"><?php echo htmlspecialchars($_rwDisplayLabel($registration['last_known_status'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Device IP'); ?>: <?php echo htmlspecialchars(($registration['device_ip'] ?? '') !== '' ? (string)$registration['device_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Device Port'); ?>: <?php echo htmlspecialchars(($registration['device_port'] ?? '') !== '' ? (string)$registration['device_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Network IP'); ?>: <?php echo htmlspecialchars(($registration['network_ip'] ?? '') !== '' ? (string)$registration['network_ip'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Network Port'); ?>: <?php echo htmlspecialchars(($registration['network_port'] ?? '') !== '' ? (string)$registration['network_port'] : _('Unknown'), ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Device'); ?>: <?php echo htmlspecialchars(($registration['device_name'] ?? '') !== '' ? (string)$registration['device_name'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Version'); ?>: <?php echo htmlspecialchars(($registration['firmware_version'] ?? '') !== '' ? (string)$registration['firmware_version'] : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Contact'); ?>: <?php echo htmlspecialchars($_rwDisplayContact($registration['contact_uri'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Contact expires'); ?>: <?php echo htmlspecialchars($_rwContactExpiryText($registration['contact_expires_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail"><?php echo _('Qualify'); ?>: <?php echo htmlspecialchars(($registration['qualify_frequency'] ?? '') !== '' ? (string)$registration['qualify_frequency'] . ' seconds' : '-', ENT_QUOTES, 'UTF-8'); ?></div>
-													<div class="rw-map-detail">
-														<?php echo _('Latency'); ?>:
-														<?php if ($registration['latency_ms'] !== null && $registration['latency_ms'] !== ''): ?>
-															<?php echo htmlspecialchars((string)$registration['latency_ms'], ENT_QUOTES, 'UTF-8'); ?> ms
-														<?php elseif ($_rwIsRegisteredNoQualify($registration['last_known_status'] ?? '')): ?>
-															<?php echo _('Unavailable; qualify is not enabled.'); ?>
-														<?php else: ?>
-															-
-														<?php endif; ?>
-													</div>
+													<?php foreach ($_rwMapDetailRows($registration) as $detailRow): ?>
+														<div class="rw-map-detail"><?php echo htmlspecialchars($detailRow[0], ENT_QUOTES, 'UTF-8'); ?>: <?php echo htmlspecialchars($detailRow[1], ENT_QUOTES, 'UTF-8'); ?></div>
+													<?php endforeach; ?>
 												</div>
 											<?php endforeach; ?>
 										</div>
@@ -278,7 +327,7 @@ $_rwAssetVer = max(
 		<div class="col-sm-12">
 			<div class="panel panel-default">
 				<div class="panel-heading">
-					<h3 class="panel-title"><?php echo _('Watched Registrations'); ?></h3>
+					<h3 class="panel-title"><?php echo _('Watched Extensions'); ?></h3>
 				</div>
 				<div class="panel-body">
 					<?php if (empty($registrations)): ?>
@@ -295,7 +344,7 @@ $_rwAssetVer = max(
 								</colgroup>
 								<thead>
 									<tr>
-										<th><?php echo _('Selection'); ?></th>
+										<th><?php echo _('Monitored'); ?></th>
 										<th><?php echo _('Extension'); ?></th>
 										<th><?php echo _('Description'); ?></th>
 										<th><?php echo _('Repeat alerts'); ?></th>
@@ -305,14 +354,13 @@ $_rwAssetVer = max(
 								<tbody>
 									<?php foreach ($registrations as $registration): ?>
 										<tr data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>" data-extension="<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?>">
-											<td data-label="<?php echo _('Selection'); ?>">
+											<td data-label="<?php echo _('Monitored'); ?>">
 													<label class="rw-toggle">
 														<input type="checkbox" class="rw-enabled" <?php echo !empty($registration['enabled']) ? 'checked' : ''; ?>>
 													</label>
 											</td>
 											<td data-label="<?php echo _('Extension'); ?>">
-												<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?><br>
-												<small class="text-muted"><?php echo htmlspecialchars(($registration['source_ip'] ?? '') !== '' ? (string)$registration['source_ip'] : _('Unknown source'), ENT_QUOTES, 'UTF-8'); ?></small>
+												<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?>
 											</td>
 											<td data-label="<?php echo _('Description'); ?>"><?php echo htmlspecialchars($registration['description'] ?: '-', ENT_QUOTES, 'UTF-8'); ?></td>
 											<td data-label="<?php echo _('Repeat alerts'); ?>">
@@ -429,7 +477,7 @@ $_rwAssetVer = max(
 									<?php echo _('Fibonacci: Reminders start frequent and gradually space out as an outage continues, settling to once per day, so a long outage does not flood you.'); ?>
 								</p>
 							</div>
-							<p class="help-block"><?php echo _('Per-registration repeat overrides can be set in the Watched Registrations table.'); ?></p>
+							<p class="help-block"><?php echo _('Per-extension repeat overrides can be set in the Watched Extensions table.'); ?></p>
 						</div>
 					</div>
 				</div>
@@ -593,10 +641,16 @@ $_rwAssetVer = max(
 	// Registration map renderer. Auto-refresh uses the read-only topology AJAX path in registrationwatch.js.
 	(function() {
 		const textNoRegistrations = <?php echo json_encode($registrationEmptyText); ?>;
-		const textDeviceIp = <?php echo json_encode(_('Device IP')); ?>;
-		const textDevicePort = <?php echo json_encode(_('Device Port')); ?>;
-		const textNetworkIp = <?php echo json_encode(_('Network IP')); ?>;
-		const textNetworkPort = <?php echo json_encode(_('Network Port')); ?>;
+		const textObservedIp = <?php echo json_encode(_('Observed IP')); ?>;
+		const textPort = <?php echo json_encode(_('Port')); ?>;
+		const textLastKnownIp = <?php echo json_encode(_('Last known IP')); ?>;
+		const textLastKnownPort = <?php echo json_encode(_('Last known port')); ?>;
+		const textLastKnownContact = <?php echo json_encode(_('Last known contact')); ?>;
+		const textDevice = <?php echo json_encode(_('Device')); ?>;
+		const textVersion = <?php echo json_encode(_('Version')); ?>;
+		const textContact = <?php echo json_encode(_('Contact')); ?>;
+		const textContactExpires = <?php echo json_encode(_('Contact expires')); ?>;
+		const textQualify = <?php echo json_encode(_('Qualify')); ?>;
 		const textLatency = <?php echo json_encode(_('Latency')); ?>;
 		const textNoQualify = <?php echo json_encode(_('Unavailable; qualify is not enabled.')); ?>;
 		const textUnknown = <?php echo json_encode(_('Unknown')); ?>;
@@ -633,6 +687,11 @@ $_rwAssetVer = max(
 				return textNoQualify;
 			}
 			return '-';
+		}
+
+		function isNotRegistered(status) {
+			status = String(status || '').trim().toLowerCase();
+			return status === 'not registered' || status === 'not_registered';
 		}
 
 		function displayLabel(value) {
@@ -700,6 +759,61 @@ $_rwAssetVer = max(
 			return text || '-';
 		}
 
+		function mapDetailRows(registration, status) {
+			const rows = [];
+			const contact = displayContactUri(registration.contact_uri);
+
+			if (isNotRegistered(status)) {
+				if (registration.source_ip) {
+					rows.push([textLastKnownIp, registration.source_ip]);
+				}
+				if (registration.source_port) {
+					rows.push([textLastKnownPort, registration.source_port]);
+				}
+				if (contact !== '-') {
+					rows.push([textLastKnownContact, contact]);
+				}
+
+				return rows;
+			}
+
+			const observedIp = registration.network_ip || registration.source_ip || '';
+			if (observedIp) {
+				rows.push([textObservedIp, observedIp]);
+			}
+
+			const observedPort = registration.network_port || registration.source_port || '';
+			if (observedPort) {
+				rows.push([textPort, observedPort]);
+			}
+
+			if (registration.device_name) {
+				rows.push([textDevice, registration.device_name]);
+			}
+			if (registration.firmware_version) {
+				rows.push([textVersion, registration.firmware_version]);
+			}
+			if (contact !== '-') {
+				rows.push([textContact, contact]);
+			}
+			if (registration.contact_expires_at) {
+				const expiresText = contactExpiryText(registration.contact_expires_at);
+				if (expiresText !== textUnknown) {
+					rows.push([textContactExpires, expiresText]);
+				}
+			}
+			if (registration.qualify_frequency) {
+				rows.push([textQualify, registration.qualify_frequency + ' seconds']);
+			}
+
+			const latency = latencyText(registration, status);
+			if (latency !== '-') {
+				rows.push([textLatency, latency]);
+			}
+
+			return rows;
+		}
+
 		function discoveredRegistrations(registrations) {
 			if (!Array.isArray(registrations)) {
 				return [];
@@ -726,7 +840,7 @@ $_rwAssetVer = max(
 				return;
 			}
 
-			count.textContent = 'Showing ' + shown + ' of ' + total + ' watched registrations';
+			count.textContent = 'Showing ' + shown + ' of ' + total + ' watched extensions';
 		}
 
 		function renderRegistrationMap(registrations) {
@@ -765,18 +879,13 @@ $_rwAssetVer = max(
 					const status = registration.status || registration.last_known_status || 'Unknown';
 					html += '<div class="rw-map-tile">';
 					html += '<div class="rw-map-title"><span class="rw-led ' + statusClass(status) + '"></span><span>' + escapeHtml(registration.extension || extension) + '</span></div>';
-					html += '<div class="rw-map-description">' + escapeHtml(registration.description || '-') + '</div>';
+					if (registration.description) {
+						html += '<div class="rw-map-description">' + escapeHtml(registration.description) + '</div>';
+					}
 					html += '<div class="rw-map-status">' + escapeHtml(displayLabel(status)) + '</div>';
-					html += '<div class="rw-map-detail">' + escapeHtml(textDeviceIp) + ': ' + escapeHtml(registration.device_ip || textUnknown) + '</div>';
-					html += '<div class="rw-map-detail">' + escapeHtml(textDevicePort) + ': ' + escapeHtml(registration.device_port || textUnknown) + '</div>';
-					html += '<div class="rw-map-detail">' + escapeHtml(textNetworkIp) + ': ' + escapeHtml(registration.network_ip || textUnknown) + '</div>';
-					html += '<div class="rw-map-detail">' + escapeHtml(textNetworkPort) + ': ' + escapeHtml(registration.network_port || textUnknown) + '</div>';
-					html += '<div class="rw-map-detail">Device: ' + escapeHtml(registration.device_name || '-') + '</div>';
-					html += '<div class="rw-map-detail">Version: ' + escapeHtml(registration.firmware_version || '-') + '</div>';
-					html += '<div class="rw-map-detail">Contact: ' + escapeHtml(displayContactUri(registration.contact_uri)) + '</div>';
-					html += '<div class="rw-map-detail">Contact expires: ' + escapeHtml(contactExpiryText(registration.contact_expires_at)) + '</div>';
-					html += '<div class="rw-map-detail">Qualify: ' + escapeHtml(registration.qualify_frequency ? registration.qualify_frequency + ' seconds' : '-') + '</div>';
-					html += '<div class="rw-map-detail">' + escapeHtml(textLatency) + ': ' + latencyText(registration, status) + '</div>';
+					for (const row of mapDetailRows(registration, status)) {
+						html += '<div class="rw-map-detail">' + escapeHtml(row[0]) + ': ' + escapeHtml(row[1]) + '</div>';
+					}
 					html += '</div>';
 				}
 				html += '</div></div>';
