@@ -2771,6 +2771,8 @@ class Registrationwatch implements \BMO {
 				'registration_ua_class' => $registration['registration_ua_class'] ?? '',
 				'extension' => $registration['extension'],
 				'description' => $registration['description'],
+				'notes' => $registration['notes'],
+				'notes_updated_at' => $registration['notes_updated_at'],
 				'enabled' => (int)$registration['enabled'],
 				'repeat_mode' => $registration['repeat_mode'] ?? null,
 				'status' => $registration['last_known_status'],

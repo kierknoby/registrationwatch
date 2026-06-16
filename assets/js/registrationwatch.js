@@ -115,6 +115,141 @@
 		});
 	}
 
+	function watchedExtensionsPanel() {
+		var found = $();
+		$('.registrationwatch .panel-title').each(function () {
+			if ($.trim($(this).text()) === 'Watched Extensions') {
+				found = $(this).closest('.panel');
+				return false;
+			}
+		});
+
+		return found;
+	}
+
+	function repeatModeOptionsHtml(selectedMode) {
+		var options = [
+			['', 'Use global'],
+			['never', 'Never'],
+			['5m', 'Every 5 minutes'],
+			['hourly', 'Hourly'],
+			['daily', 'Daily'],
+			['escalating', 'Escalating (5m → 15m → 1h → 4h → daily)'],
+			['fibonacci', 'Fibonacci (escalating)']
+		];
+		var selected = String(selectedMode || '');
+		var html = '';
+
+		$.each(options, function (_, option) {
+			html += '<option value="' + escapeHtml(option[0]) + '"' + (selected === option[0] ? ' selected' : '') + '>' + escapeHtml(option[1]) + '</option>';
+		});
+
+		return html;
+	}
+
+	function watchedExtensionsTableHtml() {
+		return '<div class="table-responsive rw-registrations-wrap">' +
+			'<table class="table table-striped table-condensed rw-registrations rw-watched-registrations-table">' +
+				'<colgroup>' +
+					'<col class="rw-col-selection">' +
+					'<col class="rw-col-extension">' +
+					'<col class="rw-col-description">' +
+					'<col class="rw-col-repeat">' +
+					'<col class="rw-col-notes">' +
+				'</colgroup>' +
+				'<thead>' +
+					'<tr>' +
+						'<th>Monitored</th>' +
+						'<th>Extension</th>' +
+						'<th>Description</th>' +
+						'<th>Repeat alerts</th>' +
+						'<th>Notes</th>' +
+					'</tr>' +
+				'</thead>' +
+				'<tbody></tbody>' +
+			'</table>' +
+		'</div>';
+	}
+
+	function watchedExtensionRowHtml(registration) {
+		var id = parseInt(registration.registration_id || registration.id, 10) || 0;
+		var notes = registration.notes || '';
+		var notesStatus = registration.notes_updated_at ? 'Saved ' + registration.notes_updated_at : '';
+
+		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '">' +
+			'<td data-label="Monitored">' +
+				'<label class="rw-toggle">' +
+					'<input type="checkbox" class="rw-enabled"' + (parseInt(registration.enabled, 10) ? ' checked' : '') + '>' +
+				'</label>' +
+			'</td>' +
+			'<td data-label="Extension">' + escapeHtml(registration.extension) + '</td>' +
+			'<td data-label="Description">' + escapeHtml(registration.description || '-') + '</td>' +
+			'<td data-label="Repeat alerts">' +
+				'<select class="form-control input-sm rw-repeat-mode" data-registration-id="' + id + '">' +
+					repeatModeOptionsHtml(registration.repeat_mode) +
+				'</select>' +
+				'<small class="text-muted rw-repeat-mode-status"></small>' +
+			'</td>' +
+			'<td data-label="Notes">' +
+				'<input type="text" class="form-control input-sm rw-registration-notes" data-registration-id="' + id + '" maxlength="48" value="' + escapeHtml(notes) + '" placeholder="Add note...">' +
+				'<small class="text-muted rw-notes-status">' + escapeHtml(notesStatus) + '</small>' +
+			'</td>' +
+		'</tr>';
+	}
+
+	function renderWatchedExtensionsTable(registrations) {
+		var $panel = watchedExtensionsPanel();
+		if (!$panel.length) {
+			return;
+		}
+
+		var rows = [];
+		var activeNote = $('.registrationwatch .rw-registration-notes:focus');
+		var activeNoteId = activeNote.length ? String(activeNote.data('registration-id') || '') : '';
+		var activeNoteValue = activeNote.length ? activeNote.val() : null;
+		var activeNoteSelection = activeNote.length && activeNote[0].setSelectionRange ? {
+			start: activeNote[0].selectionStart,
+			end: activeNote[0].selectionEnd
+		} : null;
+
+		$.each(registrations || [], function (_, registration) {
+			if (registration.discovered !== undefined && parseInt(registration.discovered, 10) === 0) {
+				return;
+			}
+			rows.push(watchedExtensionRowHtml(registration));
+		});
+
+		var $body = $panel.find('.panel-body').first();
+		if (!rows.length) {
+			$body.html('<p class="rw-placeholder">No watched extensions discovered yet. Registration Watch checks automatically; extensions will appear here once discovered.</p>');
+			$(document).trigger('registrationwatch:history-rendered');
+			return;
+		}
+
+		if (!$panel.find('.rw-registrations').length) {
+			$body.html(watchedExtensionsTableHtml());
+		}
+
+		$panel.find('.rw-registrations tbody').html(rows.join(''));
+		$panel.find('.rw-repeat-mode').each(function () {
+			$(this).data('previous-value', $(this).val() || '');
+		});
+
+		if (activeNoteId) {
+			var restored = $panel.find('.rw-registration-notes').filter(function () {
+				return String($(this).data('registration-id') || '') === activeNoteId;
+			}).first();
+			if (restored.length) {
+				restored.val(activeNoteValue).focus();
+				if (activeNoteSelection && restored[0].setSelectionRange) {
+					restored[0].setSelectionRange(activeNoteSelection.start, activeNoteSelection.end);
+				}
+			}
+		}
+
+		$(document).trigger('registrationwatch:history-rendered');
+	}
+
 	function renderHistoryRows(history) {
 		var rows = [];
 		$.each(history || [], function (_, entry) {
@@ -345,6 +480,7 @@
 					showMessage(response && response.message ? response.message : 'Unable to refresh registration status.', 'error');
 					return;
 				}
+				renderWatchedExtensionsTable(response.registrations);
 				renderStatusRows(response.registrations);
 				if (window.RegistrationWatchRenderRegistrationMap) {
 					window.RegistrationWatchRenderRegistrationMap(response.registrations);
@@ -840,7 +976,11 @@
                         $rows.show();
                 }
 
-                $panel.find('.rw-show-count').text('Showing ' + shown + ' of ' + total);
+                if ($panel.find('.rw-show-control[data-show-section="watched"]').length) {
+                        $panel.find('.rw-show-count').text('Showing ' + shown + ' of ' + total + ' watched extensions');
+                } else {
+                        $panel.find('.rw-show-count').text('Showing ' + shown + ' of ' + total);
+                }
         }
 
         function applyAllLimits(triggerMapChange) {
