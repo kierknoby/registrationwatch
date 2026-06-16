@@ -124,15 +124,15 @@
 }
 
 .registrationwatch .rw-history > tbody > tr {
-	background-color: #fff;
+	background-color: #fff !important;
 }
 
 .registrationwatch .rw-history > tbody > tr.rw-history-row-ok {
-	background-color: #dff0d8;
+	background-color: #dff0d8 !important;
 }
 
 .registrationwatch .rw-history > tbody > tr.rw-history-row-bad {
-	background-color: #f2dede;
+	background-color: #f2dede !important;
 }
 
 .registrationwatch .rw-history-control-row {
@@ -308,11 +308,11 @@
 }
 
 .registrationwatch .rw-watched-registrations-table > tbody > tr {
-        background-color: #fff;
+        background-color: #fff !important;
 }
 
 .registrationwatch .rw-watched-registrations-table > tbody > tr.rw-row-enabled {
-        background-color: #dff0d8;
+        background-color: #dff0d8 !important;
 }
 
 .registrationwatch .rw-watched-registrations-table > tbody > tr > td {
