@@ -195,6 +195,7 @@
 			'<td data-label="Monitored">' +
 				'<label class="rw-toggle">' +
 					'<input type="checkbox" class="rw-enabled"' + (parseInt(registration.enabled, 10) ? ' checked' : '') + '>' +
+					'<span class="rw-toggle-slider"></span>' +
 				'</label>' +
 			'</td>' +
 			'<td data-label="Extension">' + escapeHtml(registration.extension) + '</td>' +

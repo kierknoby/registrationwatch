@@ -296,6 +296,7 @@ $_rwAssetVer = max(
 											<td data-label="<?php echo _('Monitored'); ?>">
 													<label class="rw-toggle">
 														<input type="checkbox" class="rw-enabled" <?php echo !empty($registration['enabled']) ? 'checked' : ''; ?>>
+														<span class="rw-toggle-slider"></span>
 													</label>
 											</td>
 											<td data-label="<?php echo _('Extension'); ?>">
