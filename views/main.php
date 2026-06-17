@@ -355,7 +355,9 @@ $_rwAssetVer = max(
 									<?php foreach ($registrations as $registration): ?>
 										<tr data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>" data-extension="<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?>" <?php echo !empty($registration['enabled']) ? 'class="rw-row-enabled"' : ''; ?>>
 											<td data-label="<?php echo _('Monitored'); ?>">
-												<?php if ($_rwIsActivelyAlerting($registration)): ?>
+												<?php if (!empty($registration['enabled']) && $_rwMonitoringBannerState === 'snoozed'): ?>
+													<span class="rw-global-snoozed-label" title="<?php echo _('Global monitoring snooze is active'); ?>">💤 <?php echo _('Snoozed'); ?></span>
+												<?php elseif ($_rwIsActivelyAlerting($registration)): ?>
 													<div class="rw-alerting-cell">
 														<small class="rw-alerting-indicator"><?php echo _('Actively alerting'); ?></small>
 														<button type="button" class="btn btn-xs btn-warning rw-disable-alerting"

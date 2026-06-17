@@ -199,7 +199,14 @@
 		return status === 'unreachable' || status === 'not registered';
 	}
 
+	function globalSnoozedRowHtml() {
+		return '<span class="rw-global-snoozed-label" title="Global monitoring snooze is active">💤 Snoozed</span>';
+	}
+
 	function buildMonitoredCellHtml(enabled) {
+		if (enabled && currentMonitoringState && currentMonitoringState.state === 'snoozed') {
+			return globalSnoozedRowHtml();
+		}
 		return '<label class="rw-toggle">'
 			+ '<input type="checkbox" class="rw-enabled"' + (enabled ? ' checked' : '') + '>'
 			+ '<span class="rw-toggle-slider"></span>'
@@ -211,7 +218,9 @@
 		var notes = registration.notes || '';
 		var notesStatus = registration.notes_updated_at ? 'Saved ' + registration.notes_updated_at : '';
 		var monitoredCell;
-		if (isActivelyAlerting(registration)) {
+		if (currentMonitoringState && currentMonitoringState.state === 'snoozed' && parseInt(registration.enabled, 10)) {
+			monitoredCell = globalSnoozedRowHtml();
+		} else if (isActivelyAlerting(registration)) {
 			monitoredCell = '<div class="rw-alerting-cell">'
 				+ '<small class="rw-alerting-indicator">Actively alerting</small>'
 				+ '<button type="button" class="btn btn-xs btn-warning rw-disable-alerting" data-registration-id="' + id + '" title="Disable alerting for this extension">Disable alerting</button>'
@@ -421,6 +430,7 @@
 	}
 
 	function updateMonitoringBanner(monitoringState) {
+		var prevState = currentMonitoringState ? currentMonitoringState.state : null;
 		currentMonitoringState = monitoringState;
 
 		var banner = document.getElementById('rw-monitoring-banner');
@@ -470,6 +480,16 @@
 			var untilTs = Date.parse(String(monitoringState.snoozed_until).replace(' ', 'T'));
 			if (!isNaN(untilTs)) {
 				startSnoozeCountdown(untilTs);
+			}
+		}
+
+		if (state === 'snoozed') {
+			$('.registrationwatch .rw-row-enabled td[data-label="Monitored"]').each(function () {
+				$(this).html(globalSnoozedRowHtml());
+			});
+		} else if (prevState === 'snoozed') {
+			if (window.RegistrationWatchRefresh) {
+				window.RegistrationWatchRefresh();
 			}
 		}
 
@@ -704,6 +724,8 @@
 		}
 
 		startAutoRefresh();
+
+		window.RegistrationWatchRefresh = function () { refreshStatus(true); };
 
 		$(window).on('unload', function () {
 			stopAutoRefresh();

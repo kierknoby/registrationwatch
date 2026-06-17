@@ -390,18 +390,32 @@
 .registrationwatch .rw-alerting-cell {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 3px;
+        background: #fdf2f2;
+        border: 1px solid #f5c6cb;
+        border-radius: 3px;
+        padding: 4px 6px;
 }
 
 .registrationwatch .rw-alerting-indicator {
         color: #c9302c;
         font-weight: 600;
+        font-size: 11px;
 }
 
 .registrationwatch .rw-disable-alerting {
         white-space: normal;
         text-align: left;
-        line-height: 1.3;
+        line-height: 1.2;
+        padding: 2px 6px;
+        font-size: 11px;
+}
+
+.registrationwatch .rw-global-snoozed-label {
+        color: #888;
+        font-size: 12px;
+        white-space: nowrap;
+        cursor: default;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-extension {
