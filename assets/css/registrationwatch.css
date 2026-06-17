@@ -441,7 +441,7 @@
         max-width: 100%;
         box-sizing: border-box;
         position: relative;
-        top: 3px;
+        top: 10px;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-notes-status,
