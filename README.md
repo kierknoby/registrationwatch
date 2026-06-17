@@ -50,7 +50,7 @@ For a developer install from this repository:
 
 ```sh
 cd /var/www/html/admin/modules
-git clone https://github.com/kierknoby/endpointmonitor.git registrationwatch
+git clone https://github.com/kierknoby/registrationwatch.git registrationwatch
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
