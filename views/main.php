@@ -203,8 +203,11 @@ $_rwIsActivelyAlerting = function ($registration) {
 	return $status === 'unreachable' || $status === 'not registered';
 };
 
-$_rwSnoozeSelectHtml = function () {
-	return '<select class="input-sm rw-row-snooze">'
+$_rwSnoozeSelectHtml = function () use ($monitoringState) {
+	if (($monitoringState['state'] ?? 'active') === 'snoozed') {
+		return '<span class="rw-row-snooze-inactive" title="' . _('Global monitoring snooze is active') . '">💤 ' . _('Snoozed') . '</span>';
+	}
+	return '<select class="form-control input-sm rw-row-snooze">'
 		. '<option value="">💤 Snooze</option>'
 		. '<option value="300">' . _('Snooze 5m') . '</option>'
 		. '<option value="900">' . _('Snooze 15m') . '</option>'

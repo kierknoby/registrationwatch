@@ -403,7 +403,15 @@
 
 .registrationwatch .rw-row-snooze {
         width: auto;
+        max-width: 130px;
         flex-shrink: 1;
+}
+
+.registrationwatch .rw-row-snooze-inactive {
+        color: #888;
+        font-size: 12px;
+        white-space: nowrap;
+        cursor: default;
 }
 
 .registrationwatch .rw-alerting-indicator {

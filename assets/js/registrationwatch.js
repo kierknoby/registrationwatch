@@ -200,7 +200,7 @@
 	}
 
 	function rowSnoozeSelectHtml() {
-		return '<select class="input-sm rw-row-snooze">'
+		return '<select class="form-control input-sm rw-row-snooze">'
 			+ '<option value="">💤 Snooze</option>'
 			+ '<option value="300">Snooze 5m</option>'
 			+ '<option value="900">Snooze 15m</option>'
@@ -210,13 +210,23 @@
 			+ '</select>';
 	}
 
+	function rowSnoozeInactiveHtml() {
+		return '<span class="rw-row-snooze-inactive" title="Global monitoring snooze is active">💤 Snoozed</span>';
+	}
+
+	function rowSnoozeControlHtml() {
+		return (currentMonitoringState && currentMonitoringState.state === 'snoozed')
+			? rowSnoozeInactiveHtml()
+			: rowSnoozeSelectHtml();
+	}
+
 	function buildMonitoredCellHtml(enabled) {
 		var toggleHtml = '<label class="rw-toggle">'
 			+ '<input type="checkbox" class="rw-enabled"' + (enabled ? ' checked' : '') + '>'
 			+ '<span class="rw-toggle-slider"></span>'
 			+ '</label>';
 		if (enabled) {
-			return '<div class="rw-monitored-cell">' + toggleHtml + rowSnoozeSelectHtml() + '</div>';
+			return '<div class="rw-monitored-cell">' + toggleHtml + rowSnoozeControlHtml() + '</div>';
 		}
 		return toggleHtml;
 	}
@@ -230,7 +240,7 @@
 			monitoredCell = '<div class="rw-alerting-cell">'
 				+ '<small class="rw-alerting-indicator">Actively alerting</small>'
 				+ '<button type="button" class="btn btn-xs btn-warning rw-disable-alerting" data-registration-id="' + id + '" title="Disable alerting for this extension">Disable alerting</button>'
-				+ rowSnoozeSelectHtml()
+				+ rowSnoozeControlHtml()
 				+ '</div>';
 		} else {
 			monitoredCell = buildMonitoredCellHtml(parseInt(registration.enabled, 10));
@@ -394,6 +404,7 @@
 
 	var snoozeCountdownTimer = null;
 	var snoozeUntilTs = 0;
+	var currentMonitoringState = null;
 
 	function formatCountdown(remainingSeconds) {
 		if (remainingSeconds <= 0) {
@@ -436,6 +447,8 @@
 	}
 
 	function updateMonitoringBanner(monitoringState) {
+		currentMonitoringState = monitoringState;
+
 		var banner = document.getElementById('rw-monitoring-banner');
 		if (!banner) {
 			return;
@@ -485,6 +498,12 @@
 				startSnoozeCountdown(untilTs);
 			}
 		}
+
+		var globalSnoozed = state === 'snoozed';
+		var snoozeCtrlHtml = globalSnoozed ? rowSnoozeInactiveHtml() : rowSnoozeSelectHtml();
+		$('.registrationwatch .rw-monitored-cell, .registrationwatch .rw-alerting-cell').each(function () {
+			$(this).find('.rw-row-snooze, .rw-row-snooze-inactive').replaceWith(snoozeCtrlHtml);
+		});
 	}
 
 	window.RegistrationWatchUpdateMonitoringBanner = updateMonitoringBanner;
