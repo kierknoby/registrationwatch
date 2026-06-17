@@ -441,6 +441,7 @@
 }
 
 .registrationwatch .rw-alerting-indicator {
+        margin-left: 8px;
         color: #c9302c;
         font-weight: 600;
         font-size: 11px;
