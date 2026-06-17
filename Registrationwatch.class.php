@@ -941,7 +941,7 @@ class Registrationwatch implements \BMO {
 					(registration_key, extension, description, enabled, discovered, last_known_status,
 					 contact_count, created_at, updated_at, first_discovered_at, last_discovered_at)
 				VALUES
-					(:registration_key, :extension, :description, 1, 1, :last_known_status,
+					(:registration_key, :extension, :description, 0, 1, :last_known_status,
 					 1, :created_at, :updated_at, :first_discovered_at, :last_discovered_at)'
 			);
 			$stmt->execute([
