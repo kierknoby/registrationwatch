@@ -1,6 +1,6 @@
 # Registration Watch 1.2.0 for FreePBX 17
 
-Registration Watch (`registrationwatch`) watches SIP/PJSIP registration state in
+Registration Watch (`registrationwatch`) watches PJSIP registration state in
 FreePBX/PBXact 17. It discovers configured FreePBX PJSIP devices and tracks
 their registration and contact state, recording state changes and sending email
 alerts when watched registrations become unavailable or recover.
