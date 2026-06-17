@@ -318,9 +318,16 @@
 	margin-right: 4px;
 }
 
+.registrationwatch .rw-map-row-view th,
 .registrationwatch .rw-map-row-view td {
-	vertical-align: middle !important;
 	font-size: 12px;
+	vertical-align: middle !important;
+	white-space: nowrap;
+}
+
+.registrationwatch .rw-map-row-view td:nth-child(3) {
+	white-space: normal;
+	max-width: 160px;
 }
 
 

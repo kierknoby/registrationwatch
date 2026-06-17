@@ -689,7 +689,6 @@ $_rwAssetVer = max(
 		const textExtension = <?php echo json_encode(_('Extension')); ?>;
 		const textStatus = <?php echo json_encode(_('Status')); ?>;
 		const textDescription = <?php echo json_encode(_('Description')); ?>;
-		const textSourceIp = <?php echo json_encode(_('Source IP')); ?>;
 		let latestMapRegistrations = <?php echo json_encode($mapRegistrations); ?>;
 		let statusMapViewMode = localStorage.getItem('rw-map-view-mode') || 'card';
 		const rwInitialMonitoringState = <?php echo json_encode($monitoringState); ?>;
@@ -860,22 +859,36 @@ $_rwAssetVer = max(
 				html += '<th>' + escapeHtml(textExtension) + '</th>';
 				html += '<th>' + escapeHtml(textStatus) + '</th>';
 				html += '<th>' + escapeHtml(textDescription) + '</th>';
-				html += '<th>' + escapeHtml(textSourceIp) + '</th>';
-				html += '<th>' + escapeHtml(textLatency) + '</th>';
+				html += '<th>' + escapeHtml(textDeviceIp) + '</th>';
+				html += '<th>' + escapeHtml(textNetworkIp) + '</th>';
+				html += '<th>' + escapeHtml(textDevice) + '</th>';
 				html += '<th>' + escapeHtml(textContactExpires) + '</th>';
+				html += '<th>' + escapeHtml(textQualify) + '</th>';
+				html += '<th>' + escapeHtml(textLatency) + '</th>';
 				html += '</tr></thead><tbody>';
 				for (const registration of visible) {
 					const status = registration.status || registration.last_known_status || 'Unknown';
-					const srcIp = registration.device_ip
+					const deviceIpPort = registration.device_ip
 						? escapeHtml(registration.device_ip) + (registration.device_port ? ':' + escapeHtml(String(registration.device_port)) : '')
+						: textEmpty;
+					const networkIpPort = registration.network_ip
+						? escapeHtml(registration.network_ip) + (registration.network_port ? ':' + escapeHtml(String(registration.network_port)) : '')
+						: textEmpty;
+					const deviceCell = escapeHtml(registration.device_name || textEmpty)
+						+ (registration.firmware_version ? '<br><small class="text-muted">' + escapeHtml(registration.firmware_version) + '</small>' : '');
+					const qualifyText = registration.qualify_frequency
+						? escapeHtml(String(registration.qualify_frequency)) + ' s'
 						: textEmpty;
 					html += '<tr>';
 					html += '<td><span class="rw-led ' + statusClass(status) + '"></span> ' + escapeHtml(registration.extension || textUnknown) + '</td>';
 					html += '<td>' + escapeHtml(displayLabel(status)) + '</td>';
 					html += '<td>' + escapeHtml(registration.description || '-') + '</td>';
-					html += '<td>' + srcIp + '</td>';
-					html += '<td>' + latencyText(registration, status) + '</td>';
+					html += '<td>' + deviceIpPort + '</td>';
+					html += '<td>' + networkIpPort + '</td>';
+					html += '<td>' + deviceCell + '</td>';
 					html += '<td>' + contactExpiryText(registration.contact_expires_at) + '</td>';
+					html += '<td>' + qualifyText + '</td>';
+					html += '<td>' + latencyText(registration, status) + '</td>';
 					html += '</tr>';
 				}
 				html += '</tbody></table>';
