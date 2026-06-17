@@ -449,6 +449,16 @@
         margin-top: 4px;
 }
 
+@media (min-width: 768px) {
+        .registrationwatch .rw-watched-registrations-table td[data-label="Repeat alerts"],
+        .registrationwatch .rw-watched-registrations-table td[data-label="Notes"] {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: stretch;
+        }
+}
+
 @media (max-width: 767px) {
 	.registrationwatch {
 		overflow-x: hidden;
