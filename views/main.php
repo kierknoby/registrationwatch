@@ -203,6 +203,17 @@ $_rwIsActivelyAlerting = function ($registration) {
 	return $status === 'unreachable' || $status === 'not registered';
 };
 
+$_rwSnoozeSelectHtml = function () {
+	return '<select class="form-control input-sm rw-row-snooze">'
+		. '<option value="">' . _('Snooze...') . '</option>'
+		. '<option value="300">' . _('Snooze 5m') . '</option>'
+		. '<option value="900">' . _('Snooze 15m') . '</option>'
+		. '<option value="1800">' . _('Snooze 30m') . '</option>'
+		. '<option value="3600">' . _('Snooze 1h') . '</option>'
+		. '<option value="86400">' . _('Snooze 1d') . '</option>'
+		. '</select>';
+};
+
 $_rwMapDetailRows = function ($registration) use ($_rwContactExpiryText, $_rwIsRegisteredNoQualify) {
 	return [
 		[_('Device IP'), ($registration['device_ip'] ?? '') !== '' ? (string)$registration['device_ip'] : '-'],
@@ -255,10 +266,11 @@ $_rwAssetVer = max(
 						<strong><?php echo _('Monitoring active'); ?></strong>
 						<p class="rw-monitoring-desc"><?php echo _('Status checks are running. Alerts will be sent for monitored extensions.'); ?></p>
 						<div class="rw-monitoring-actions">
-							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="300"><?php echo _('Pause 5m'); ?></button>
-							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="900"><?php echo _('Pause 15m'); ?></button>
-							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="1800"><?php echo _('Pause 30m'); ?></button>
-							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="3600"><?php echo _('Pause 1h'); ?></button>
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="300"><?php echo _('Snooze 5m'); ?></button>
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="900"><?php echo _('Snooze 15m'); ?></button>
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="1800"><?php echo _('Snooze 30m'); ?></button>
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="3600"><?php echo _('Snooze 1h'); ?></button>
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="86400"><?php echo _('Snooze 1d'); ?></button>
 						</div>
 					</div>
 				<?php endif; ?>
@@ -355,14 +367,26 @@ $_rwAssetVer = max(
 										<tr data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>" data-extension="<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?>" <?php echo !empty($registration['enabled']) ? 'class="rw-row-enabled"' : ''; ?>>
 											<td data-label="<?php echo _('Monitored'); ?>">
 												<?php if ($_rwIsActivelyAlerting($registration)): ?>
-													<button type="button" class="btn btn-xs btn-warning rw-disable-monitoring"
-															data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>"
-															title="<?php echo _('Disable monitoring for this extension'); ?>">
-														🚨 <?php echo _('Disable monitoring'); ?>
-													</button>
+													<div class="rw-alerting-cell">
+														<small class="rw-alerting-indicator"><?php echo _('Actively alerting'); ?></small>
+														<button type="button" class="btn btn-xs btn-warning rw-disable-alerting"
+																data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>"
+																title="<?php echo _('Disable alerting for this extension'); ?>">
+															<?php echo _('Disable alerting'); ?>
+														</button>
+														<?php echo $_rwSnoozeSelectHtml(); ?>
+													</div>
+												<?php elseif (!empty($registration['enabled'])): ?>
+													<div class="rw-monitored-cell">
+														<label class="rw-toggle">
+															<input type="checkbox" class="rw-enabled" checked>
+															<span class="rw-toggle-slider"></span>
+														</label>
+														<?php echo $_rwSnoozeSelectHtml(); ?>
+													</div>
 												<?php else: ?>
 													<label class="rw-toggle">
-														<input type="checkbox" class="rw-enabled" <?php echo !empty($registration['enabled']) ? 'checked' : ''; ?>>
+														<input type="checkbox" class="rw-enabled">
 														<span class="rw-toggle-slider"></span>
 													</label>
 												<?php endif; ?>

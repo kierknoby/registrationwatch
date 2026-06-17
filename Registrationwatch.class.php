@@ -263,6 +263,7 @@ class Registrationwatch implements \BMO {
 			case 'deletealerthistoryrow':
 			case 'snoozemonitoring':
 			case 'resumemonitoring':
+			case 'snoozeregistration':
 				return true;
 		}
 
@@ -309,6 +310,8 @@ class Registrationwatch implements \BMO {
 				return $this->handleSnoozeMonitoring();
 			case 'resumemonitoring':
 				return $this->handleResumeMonitoring();
+			case 'snoozeregistration':
+				return $this->handleSnoozeRegistration();
 		}
 
 		return ['status' => false, 'message' => _('Unknown command')];
@@ -356,6 +359,7 @@ class Registrationwatch implements \BMO {
 			'message' => $enabled ? _('Registration selected.') : _('Registration selection cleared.'),
 			'registration_id' => $registrationId,
 			'enabled' => $enabled,
+			'monitoringState' => $this->getMonitoringState(),
 		];
 	}
 
@@ -702,7 +706,7 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function handleSnoozeMonitoring(): array {
-		$allowed = [300, 900, 1800, 3600];
+		$allowed = [300, 900, 1800, 3600, 86400];
 		$seconds = isset($_REQUEST['seconds']) ? (int)$_REQUEST['seconds'] : 0;
 		if (!in_array($seconds, $allowed, true)) {
 			return ['status' => false, 'message' => _('Invalid snooze duration.')];
@@ -722,6 +726,32 @@ class Registrationwatch implements \BMO {
 			'status' => true,
 			'message' => _('Monitoring resumed.'),
 			'monitoringState' => $this->getMonitoringState(),
+		];
+	}
+
+	private function handleSnoozeRegistration(): array {
+		$registrationId = $this->positiveRequestId('registration_id');
+		if ($registrationId <= 0) {
+			return ['status' => false, 'message' => _('Missing watched registration.')];
+		}
+
+		$allowed = [300, 900, 1800, 3600, 86400];
+		$seconds = isset($_REQUEST['seconds']) ? (int)$_REQUEST['seconds'] : 0;
+		if (!in_array($seconds, $allowed, true)) {
+			return ['status' => false, 'message' => _('Invalid snooze duration.')];
+		}
+
+		$until = date('Y-m-d H:i:s', strtotime($this->now()) + $seconds);
+		$stmt = $this->db()->prepare(
+			'UPDATE registrationwatch_registrations SET snoozed_until = :snoozed_until WHERE id = :id'
+		);
+		$stmt->execute([':snoozed_until' => $until, ':id' => $registrationId]);
+
+		return [
+			'status' => true,
+			'message' => _('Registration snoozed.'),
+			'registration_id' => $registrationId,
+			'snoozed_until' => $until,
 		];
 	}
 
@@ -2460,6 +2490,22 @@ class Registrationwatch implements \BMO {
 		return $result;
 	}
 
+	private function getSnoozedRegistrationIds(string $now): array {
+		try {
+			$stmt = $this->db()->prepare(
+				'SELECT id FROM registrationwatch_registrations WHERE snoozed_until > :now'
+			);
+			$stmt->execute([':now' => $now]);
+			$result = [];
+			foreach ($stmt->fetchAll(\PDO::FETCH_COLUMN) as $id) {
+				$result[(int)$id] = true;
+			}
+			return $result;
+		} catch (\Throwable $e) {
+			return [];
+		}
+	}
+
 	private function dispatchCollectedAlerts(array $alerts, array $reminderCycles, array $settings, array $recipients, string $now): void {
 		if (!$alerts) {
 			return;
@@ -2479,6 +2525,50 @@ class Registrationwatch implements \BMO {
 			}
 			$this->markReminderCyclesComplete($reminderCycles, $now);
 			return;
+		}
+
+		$snoozedIds = $this->getSnoozedRegistrationIds($now);
+		if ($snoozedIds) {
+			$snoozedAlerts = [];
+			$activeAlerts = [];
+			foreach ($alerts as $alert) {
+				if (isset($snoozedIds[(int)($alert['registration_id'] ?? 0)])) {
+					$snoozedAlerts[] = $alert;
+				} else {
+					$activeAlerts[] = $alert;
+				}
+			}
+
+			$snoozedCycles = [];
+			$activeCycles = [];
+			foreach ($reminderCycles as $cycleId => $cycle) {
+				if (isset($snoozedIds[(int)($cycle['row']['registration_id'] ?? 0)])) {
+					$snoozedCycles[$cycleId] = $cycle;
+				} else {
+					$activeCycles[$cycleId] = $cycle;
+				}
+			}
+
+			foreach ($snoozedAlerts as $alert) {
+				$this->updateReservedAlertHistory(
+					(int)$alert['history_id'],
+					(string)$alert['alert_type'],
+					(string)$alert['recipient'],
+					'suppressed',
+					'Registration snoozed',
+					$now,
+					(int)($alert['reminder_n'] ?? 0)
+				);
+			}
+			$this->markReminderCyclesComplete($snoozedCycles, $now);
+
+			$alerts = $activeAlerts;
+			$reminderCycles = $activeCycles;
+
+			if (!$alerts) {
+				$this->markReminderCyclesComplete($reminderCycles, $now);
+				return;
+			}
 		}
 
 		$threshold = $this->stormThreshold($settings);

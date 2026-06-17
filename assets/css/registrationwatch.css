@@ -387,7 +387,24 @@
         width: 130px;
 }
 
-.registrationwatch .rw-disable-monitoring {
+.registrationwatch .rw-alerting-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+}
+
+.registrationwatch .rw-monitored-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+}
+
+.registrationwatch .rw-alerting-indicator {
+        color: #c9302c;
+        font-weight: 600;
+}
+
+.registrationwatch .rw-disable-alerting {
         white-space: normal;
         text-align: left;
         line-height: 1.3;

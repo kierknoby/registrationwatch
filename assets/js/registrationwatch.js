@@ -58,14 +58,18 @@
 	}
 
 	function showMessage(message, level) {
-		var el = $('#rw-message');
-		el.removeClass('alert-success alert-danger alert-info');
 		if (!message) {
-			el.hide();
 			return;
 		}
-		el.addClass(level === 'error' ? 'alert-danger' : (level === 'info' ? 'alert-info' : 'alert-success'));
-		el.text(message).show();
+		if (window.RegistrationWatchToast) {
+			window.RegistrationWatchToast(message, level === 'error' ? 'danger' : (level || 'success'));
+			return;
+		}
+		if (level === 'error') {
+			var el = $('#rw-message');
+			el.removeClass('alert-success alert-danger alert-info').addClass('alert-danger');
+			el.text(message).show();
+		}
 	}
 
 	function normaliseToken(value) {
@@ -199,9 +203,29 @@
 		var id = parseInt(registration.registration_id || registration.id, 10) || 0;
 		var notes = registration.notes || '';
 		var notesStatus = registration.notes_updated_at ? 'Saved ' + registration.notes_updated_at : '';
-		var monitoredCell = isActivelyAlerting(registration)
-			? '<button type="button" class="btn btn-xs btn-warning rw-disable-monitoring" data-registration-id="' + id + '" title="Disable monitoring for this extension">🚨 Disable monitoring</button>'
-			: '<label class="rw-toggle"><input type="checkbox" class="rw-enabled"' + (parseInt(registration.enabled, 10) ? ' checked' : '') + '><span class="rw-toggle-slider"></span></label>';
+		var rowSnoozeHtml = '<select class="form-control input-sm rw-row-snooze">'
+			+ '<option value="">Snooze...</option>'
+			+ '<option value="300">Snooze 5m</option>'
+			+ '<option value="900">Snooze 15m</option>'
+			+ '<option value="1800">Snooze 30m</option>'
+			+ '<option value="3600">Snooze 1h</option>'
+			+ '<option value="86400">Snooze 1d</option>'
+			+ '</select>';
+		var monitoredCell;
+		if (isActivelyAlerting(registration)) {
+			monitoredCell = '<div class="rw-alerting-cell">'
+				+ '<small class="rw-alerting-indicator">Actively alerting</small>'
+				+ '<button type="button" class="btn btn-xs btn-warning rw-disable-alerting" data-registration-id="' + id + '" title="Disable alerting for this extension">Disable alerting</button>'
+				+ rowSnoozeHtml
+				+ '</div>';
+		} else if (parseInt(registration.enabled, 10)) {
+			monitoredCell = '<div class="rw-monitored-cell">'
+				+ '<label class="rw-toggle"><input type="checkbox" class="rw-enabled" checked><span class="rw-toggle-slider"></span></label>'
+				+ rowSnoozeHtml
+				+ '</div>';
+		} else {
+			monitoredCell = '<label class="rw-toggle"><input type="checkbox" class="rw-enabled"><span class="rw-toggle-slider"></span></label>';
+		}
 
 		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '"' + (parseInt(registration.enabled, 10) ? ' class="rw-row-enabled"' : '') + '>' +
 			'<td data-label="Monitored">' + monitoredCell + '</td>' +
@@ -435,10 +459,11 @@
 				+ '<strong>Monitoring active</strong>'
 				+ '<p class="rw-monitoring-desc">Status checks are running. Alerts will be sent for monitored extensions.</p>'
 				+ '<div class="rw-monitoring-actions">'
-				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="300">Pause 5m</button>'
-				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="900">Pause 15m</button>'
-				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="1800">Pause 30m</button>'
-				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="3600">Pause 1h</button>'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="300">Snooze 5m</button>'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="900">Snooze 15m</button>'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="1800">Snooze 30m</button>'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="3600">Snooze 1h</button>'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="86400">Snooze 1d</button>'
 				+ '</div>'
 				+ '</div>';
 		}
@@ -525,7 +550,9 @@
 					row.toggleClass('rw-row-enabled', enabled === 0);
 					showMessage(response && response.message ? response.message : 'Unable to save watch setting.', 'error');
 				} else {
-					showMessage(response.message || 'Watch setting saved.', 'success');
+					if (response.monitoringState) {
+						updateMonitoringBanner(response.monitoringState);
+					}
 				}
 			}).fail(function () {
 				input.prop('checked', !enabled);
@@ -684,7 +711,7 @@
 			stopSnoozeCountdown();
 		});
 
-		root.on('click', '.rw-disable-monitoring', function () {
+		root.on('click', '.rw-disable-alerting', function () {
 			var btn = $(this);
 			var row = btn.closest('tr');
 			var registrationId = btn.data('registration-id') || row.data('registration-id');
@@ -708,7 +735,7 @@
 				}
 			}).done(function (response) {
 				if (!response || !response.status) {
-					showMessage(response && response.message ? response.message : 'Unable to disable monitoring.', 'error');
+					showMessage(response && response.message ? response.message : 'Unable to disable alerting.', 'error');
 					btn.prop('disabled', false);
 					return;
 				}
@@ -719,9 +746,11 @@
 					'<span class="rw-toggle-slider"></span>' +
 					'</label>'
 				);
-				showMessage(response.message || 'Monitoring disabled.', 'success');
+				if (response.monitoringState) {
+					updateMonitoringBanner(response.monitoringState);
+				}
 			}).fail(function () {
-				showMessage('Unable to disable monitoring.', 'error');
+				showMessage('Unable to disable alerting.', 'error');
 				btn.prop('disabled', false);
 			});
 		});
@@ -783,6 +812,43 @@
 			}).fail(function () {
 				showMessage('Unable to resume monitoring.', 'error');
 				btn.prop('disabled', false);
+			});
+		});
+
+		root.on('change', '.rw-row-snooze', function () {
+			var select = $(this);
+			var row = select.closest('tr');
+			var registrationId = row.data('registration-id');
+			var seconds = parseInt(select.val(), 10);
+			select.val('');
+			if (!seconds || [300, 900, 1800, 3600, 86400].indexOf(seconds) === -1) {
+				return;
+			}
+			if (!registrationId) {
+				showMessage('Unable to identify registration. Please reload the page and try again.', 'error');
+				return;
+			}
+			var token = registrationWatchToken(root);
+			if (!token) {
+				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
+				return;
+			}
+			$.ajax({
+				url: 'ajax.php?module=registrationwatch',
+				method: 'POST',
+				dataType: 'json',
+				data: {
+					command: 'snoozeregistration',
+					registration_id: registrationId,
+					seconds: seconds,
+					token: token
+				}
+			}).done(function (response) {
+				if (!response || !response.status) {
+					showMessage(response && response.message ? response.message : 'Unable to snooze registration.', 'error');
+				}
+			}).fail(function () {
+				showMessage('Unable to snooze registration.', 'error');
 			});
 		});
 
