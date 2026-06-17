@@ -112,6 +112,18 @@
 		latestWatched: null, latestStatus: null, latestAlert: null
 	};
 
+	window.rwUpdateWatchedNote = function (registrationId, notes, notesUpdatedAt) {
+		if (!rwTableSort.latestWatched) { return; }
+		var id = parseInt(registrationId, 10);
+		$.each(rwTableSort.latestWatched, function (_, reg) {
+			if (parseInt(reg.registration_id || reg.id, 10) === id) {
+				reg.notes = notes;
+				reg.notes_updated_at = notesUpdatedAt || null;
+				return false;
+			}
+		});
+	};
+
 	function applySortToArray(arr, key, dir, fieldMap) {
 		return arr.slice().sort(function (a, b) {
 			var field = fieldMap[key] || key;
@@ -1292,6 +1304,9 @@
                         }
 
                         if (response && response.status) {
+                                if (window.rwUpdateWatchedNote) {
+                                        window.rwUpdateWatchedNote(registrationId, response.notes || '', response.notes_updated_at || null);
+                                }
                                 if (response.notes_updated_at) {
                                         $status.text('Saved ' + response.notes_updated_at);
                                 } else {
