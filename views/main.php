@@ -691,6 +691,8 @@ $_rwAssetVer = max(
 		const textDescription = <?php echo json_encode(_('Description')); ?>;
 		let latestMapRegistrations = <?php echo json_encode($mapRegistrations); ?>;
 		let statusMapViewMode = localStorage.getItem('rw-map-view-mode') || 'card';
+		let rowSortKey = localStorage.getItem('rw-map-row-sort-key') || 'extension';
+		let rowSortDir = localStorage.getItem('rw-map-row-sort-dir') || 'asc';
 		const rwInitialMonitoringState = <?php echo json_encode($monitoringState); ?>;
 		if (window.RegistrationWatchUpdateMonitoringBanner) {
 			window.RegistrationWatchUpdateMonitoringBanner(rwInitialMonitoringState);
@@ -822,6 +824,70 @@ $_rwAssetVer = max(
 			count.textContent = 'Showing ' + shown + ' of ' + total + ' EndPoints';
 		}
 
+		function ipSortKey(ip) {
+			if (!ip) { return '\xff\xff\xff\xff'; }
+			const parts = String(ip).split('.');
+			if (parts.length !== 4) { return String(ip).toLowerCase(); }
+			return parts.map(function(p) { return String(parseInt(p, 10) || 0).padStart(3, '0'); }).join('.');
+		}
+
+		function contactExpirySortNum(expiresAt) {
+			if (!expiresAt) { return Infinity; }
+			const t = Date.parse(String(expiresAt).replace(' ', 'T'));
+			return Number.isNaN(t) ? Infinity : Math.floor((t - Date.now()) / 1000);
+		}
+
+		function getRowSortValue(reg, key) {
+			switch (key) {
+				case 'extension':
+					return String(reg.extension || '').trim().replace(/(\d+)/g, function(m) { return m.padStart(6, '0'); }).toLowerCase();
+				case 'status': {
+					const st = reg.status || reg.last_known_status || 'Unknown';
+					return displayLabel(st).toLowerCase();
+				}
+				case 'description':
+					return String(reg.description || '').toLowerCase();
+				case 'device_ip':
+					return ipSortKey(reg.device_ip);
+				case 'network_ip':
+					return ipSortKey(reg.network_ip);
+				case 'device':
+					return String(reg.device_name || '').toLowerCase();
+				case 'contact_expires':
+					return contactExpirySortNum(reg.contact_expires_at);
+				case 'qualify':
+					return (reg.qualify_frequency !== null && reg.qualify_frequency !== undefined && reg.qualify_frequency !== '')
+						? parseFloat(reg.qualify_frequency) : Infinity;
+				case 'latency':
+					return (reg.latency_ms !== null && reg.latency_ms !== undefined && reg.latency_ms !== '')
+						? parseFloat(reg.latency_ms) : Infinity;
+				default:
+					return '';
+			}
+		}
+
+		function sortedVisibleRows(arr) {
+			return arr.slice().sort(function(a, b) {
+				const va = getRowSortValue(a, rowSortKey);
+				const vb = getRowSortValue(b, rowSortKey);
+				let cmp;
+				if (typeof va === 'number' && typeof vb === 'number') {
+					cmp = va - vb;
+				} else {
+					const sa = String(va);
+					const sb = String(vb);
+					cmp = sa < sb ? -1 : sa > sb ? 1 : 0;
+				}
+				return rowSortDir === 'desc' ? -cmp : cmp;
+			});
+		}
+
+		function sortTh(key, label) {
+			const active = rowSortKey === key;
+			const arrow = active ? ' <span class="rw-sort-arrow">' + (rowSortDir === 'asc' ? '&#9650;' : '&#9660;') + '</span>' : '';
+			return '<th data-sort-key="' + key + '"' + (active ? ' class="rw-sort-active"' : '') + '>' + escapeHtml(label) + arrow + '</th>';
+		}
+
 		function applyViewToggleState() {
 			const btnCard = document.getElementById('rw-map-view-card');
 			const btnRow = document.getElementById('rw-map-view-row');
@@ -854,19 +920,20 @@ $_rwAssetVer = max(
 			}
 
 			if (statusMapViewMode === 'row') {
+				const rows = sortedVisibleRows(visible);
 				let html = '<table class="table table-condensed rw-map-row-view">';
 				html += '<thead><tr>';
-				html += '<th>' + escapeHtml(textExtension) + '</th>';
-				html += '<th>' + escapeHtml(textStatus) + '</th>';
-				html += '<th>' + escapeHtml(textDescription) + '</th>';
-				html += '<th>' + escapeHtml(textDeviceIp) + '</th>';
-				html += '<th>' + escapeHtml(textNetworkIp) + '</th>';
-				html += '<th>' + escapeHtml(textDevice) + '</th>';
-				html += '<th>' + escapeHtml(textContactExpires) + '</th>';
-				html += '<th>' + escapeHtml(textQualify) + '</th>';
-				html += '<th>' + escapeHtml(textLatency) + '</th>';
+				html += sortTh('extension', textExtension);
+				html += sortTh('status', textStatus);
+				html += sortTh('description', textDescription);
+				html += sortTh('device_ip', textDeviceIp);
+				html += sortTh('network_ip', textNetworkIp);
+				html += sortTh('device', textDevice);
+				html += sortTh('contact_expires', textContactExpires);
+				html += sortTh('qualify', textQualify);
+				html += sortTh('latency', textLatency);
 				html += '</tr></thead><tbody>';
-				for (const registration of visible) {
+				for (const registration of rows) {
 					const status = registration.status || registration.last_known_status || 'Unknown';
 					const deviceIpPort = registration.device_ip
 						? escapeHtml(registration.device_ip) + (registration.device_port ? ':' + escapeHtml(String(registration.device_port)) : '')
@@ -915,6 +982,24 @@ $_rwAssetVer = max(
 		const mapLimitSelect = document.getElementById('rw-map-limit');
 		if (mapLimitSelect) {
 			mapLimitSelect.addEventListener('change', function() {
+				renderRegistrationMap(latestMapRegistrations);
+			});
+		}
+
+		const mapContainer = document.getElementById('rw-topology-container');
+		if (mapContainer) {
+			mapContainer.addEventListener('click', function(e) {
+				const th = e.target.closest('th[data-sort-key]');
+				if (!th) { return; }
+				const key = th.getAttribute('data-sort-key');
+				if (rowSortKey === key) {
+					rowSortDir = rowSortDir === 'asc' ? 'desc' : 'asc';
+				} else {
+					rowSortKey = key;
+					rowSortDir = 'asc';
+				}
+				localStorage.setItem('rw-map-row-sort-key', rowSortKey);
+				localStorage.setItem('rw-map-row-sort-dir', rowSortDir);
 				renderRegistrationMap(latestMapRegistrations);
 			});
 		}
