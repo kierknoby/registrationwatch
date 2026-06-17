@@ -849,16 +849,16 @@
 			});
 		});
 
-		$(document).on('click', '.registrationwatch .rw-row-snooze-option', function (e) {
+		document.addEventListener('click', function (e) {
+			var link = e.target.closest('.rw-row-snooze-option');
+			if (!link) { return; }
+			if (!link.closest('.registrationwatch')) { return; }
 			e.preventDefault();
-			var link = $(this);
+			e.stopPropagation();
+			var seconds = parseInt(link.getAttribute('data-seconds'), 10);
+			if (!seconds || [300, 900, 1800, 3600, 86400].indexOf(seconds) === -1) { return; }
 			var row = link.closest('tr');
-			var registrationId = row.data('registration-id');
-			var seconds = parseInt(link.data('seconds'), 10);
-
-			if (!seconds || [300, 900, 1800, 3600, 86400].indexOf(seconds) === -1) {
-				return;
-			}
+			var registrationId = row ? row.getAttribute('data-registration-id') : null;
 			if (!registrationId) {
 				showMessage('Unable to identify registration. Please reload the page and try again.', 'error');
 				return;
@@ -885,7 +885,7 @@
 			}).fail(function () {
 				showMessage('Unable to snooze registration.', 'error');
 			});
-		});
+		}, true);
 
 		$('#rw-save-alerts').on('click', function () {
 			var button = $(this);
