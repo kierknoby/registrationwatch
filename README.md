@@ -35,6 +35,7 @@ Use with FreePBX/PBXact 17 only. Do not install on FreePBX/PBXact 16 or below.
 * Asterisk Manager access available to FreePBX
 * FreePBX Job runner enabled for scheduled background checks
 * FreePBX mail support configured if alert email delivery is required
+* Email "From:" Address set in Advanced Settings (alerts will not send without it)
 
 ## Installing
 
