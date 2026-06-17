@@ -518,7 +518,7 @@ class Registrationwatch implements \BMO {
 			'ui_map_view_mode'              => ['card', 'row'],
 			'ui_map_sort_key'               => ['extension', 'status', 'description', 'device_ip', 'network_ip', 'device', 'contact_expires', 'qualify', 'latency'],
 			'ui_map_sort_dir'               => $dirs,
-			'ui_watched_sort_key'           => ['extension', 'description', 'repeat', 'notes'],
+			'ui_watched_sort_key'           => ['monitored', 'extension', 'description', 'repeat', 'notes'],
 			'ui_watched_sort_dir'           => $dirs,
 			'ui_status_history_sort_key'    => ['time', 'extension', 'from', 'to', 'source', 'reason', 'latency'],
 			'ui_status_history_sort_dir'    => $dirs,

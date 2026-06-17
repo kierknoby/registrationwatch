@@ -446,7 +446,7 @@ $_rwAssetVer = max(
 								</colgroup>
 								<thead>
 									<tr>
-										<th><?php echo _('Monitored'); ?></th>
+										<th data-sort-key="monitored"><?php echo _('Monitored'); ?> <span class="rw-sort-arrow"></span></th>
 										<th data-sort-key="extension"><?php echo _('Extension'); ?> <span class="rw-sort-arrow"></span></th>
 										<th data-sort-key="description"><?php echo _('Description'); ?> <span class="rw-sort-arrow"></span></th>
 										<th data-sort-key="repeat"><?php echo _('Repeat alerts'); ?> <span class="rw-sort-arrow"></span></th>

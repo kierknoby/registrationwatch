@@ -218,7 +218,7 @@
 				'</colgroup>' +
 				'<thead>' +
 					'<tr>' +
-						'<th>Monitored</th>' +
+						'<th data-sort-key="monitored">Monitored <span class="rw-sort-arrow"></span></th>' +
 						'<th data-sort-key="extension">Extension <span class="rw-sort-arrow"></span></th>' +
 						'<th data-sort-key="description">Description <span class="rw-sort-arrow"></span></th>' +
 						'<th data-sort-key="repeat">Repeat alerts <span class="rw-sort-arrow"></span></th>' +
@@ -325,7 +325,7 @@
 		}
 
 		rwTableSort.latestWatched = registrations;
-		var watchedFieldMap = { extension: 'extension', description: 'description', repeat: 'repeat_mode', notes: 'notes' };
+		var watchedFieldMap = { monitored: 'enabled', extension: 'extension', description: 'description', repeat: 'repeat_mode', notes: 'notes' };
 		var sorted = applySortToArray(registrations || [], rwTableSort.watchedKey, rwTableSort.watchedDir, watchedFieldMap);
 
 		var rows = [];
