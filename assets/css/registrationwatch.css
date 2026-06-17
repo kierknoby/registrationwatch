@@ -166,6 +166,7 @@
 
 .registrationwatch .rw-history > tbody > tr > td {
 	background-color: #fff !important;
+	vertical-align: middle !important;
 }
 
 .registrationwatch .rw-history > tbody > tr.rw-history-row-ok > td {
@@ -182,6 +183,7 @@
 
 .registrationwatch .rw-alert-history > tbody > tr > td {
 	background-color: #fff !important;
+	vertical-align: middle !important;
 }
 
 .registrationwatch .rw-alert-history > tbody > tr.rw-alert-history-row-ok > td {
@@ -370,9 +372,8 @@
 
 .registrationwatch .rw-watched-registrations-table > tbody > tr > td {
         background-color: #fff !important;
-        padding-top: 9px;
-        padding-bottom: 7px;
-        vertical-align: middle;
+        padding: 8px;
+        vertical-align: middle !important;
 }
 
 .registrationwatch .rw-watched-registrations-table > tbody > tr.rw-row-enabled > td {

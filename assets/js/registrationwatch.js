@@ -836,7 +836,7 @@
 			});
 		});
 
-		$('#rw-save-alerts').on('click', function () {
+		$('#rw-save-alerts').off('click.registrationwatch').on('click.registrationwatch', function () {
 			var button = $(this);
 			var token = registrationWatchToken(root);
 			if (!token) {
