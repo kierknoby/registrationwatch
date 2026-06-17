@@ -50,7 +50,6 @@ Place the `registrationwatch` directory in `/var/www/html/admin/modules/`, then:
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
-cd ~
 ```
 
 **Option 2: Developer install from GitHub**
@@ -61,7 +60,6 @@ git clone https://github.com/kierknoby/registrationwatch.git registrationwatch
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
-cd ~
 ```
 
 **Option 3: Developer install from a local copy**
@@ -73,7 +71,6 @@ If you have a local copy of the repository, copy or symlink the
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
-cd ~
 ```
 
 The module appears under **Reports > Registration Watch**.
@@ -100,7 +97,6 @@ the new release files, then:
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
-cd ~
 ```
 
 **Option 2: Developer update from GitHub**
@@ -112,7 +108,6 @@ git pull origin main
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
-cd ~
 ```
 
 **Option 3: Developer update from a local copy**
@@ -124,7 +119,6 @@ Replace or re-copy the `registrationwatch` directory into
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
-cd ~
 ```
 
 Check the installed version after updating:
