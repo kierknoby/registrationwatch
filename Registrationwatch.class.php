@@ -585,8 +585,7 @@ class Registrationwatch implements \BMO {
 	}
 
 	private function handleGetTopology(): array {
-		// Read-only action: returns stored registration, status-history, and alert-history data only.
-		// Do not trigger discovery, reconciliation, history writes, or alerts here.
+		$this->reconcileIfStale($this->getPollInterval());
 		try {
 			return [
 				'status' => true,
@@ -1139,6 +1138,26 @@ class Registrationwatch implements \BMO {
 		}
 
 		return $descriptions;
+	}
+
+	private function reconcileIfStale(int $maxAgeSeconds): void {
+		$threshold = max(5, $maxAgeSeconds);
+		try {
+			$stmt = $this->db()->query(
+				'SELECT MAX(last_checked_at) FROM registrationwatch_registrations WHERE discovered = 1'
+			);
+			$latest = $stmt ? $stmt->fetchColumn() : null;
+			if ($latest !== null && $latest !== false && $latest !== '') {
+				$nowTs = strtotime($this->now());
+				$latestTs = strtotime((string)$latest);
+				if ($latestTs !== false && ($nowTs - $latestTs) < $threshold) {
+					return;
+				}
+			}
+			$this->reconcileCurrentStatus();
+		} catch (\Throwable $e) {
+			$this->logWarning('Registration Watch stale-guard reconciliation failed: ' . $e->getMessage());
+		}
 	}
 
 	private function reconcileCurrentStatus(): void {
