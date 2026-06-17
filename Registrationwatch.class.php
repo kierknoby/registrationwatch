@@ -3033,10 +3033,12 @@ class Registrationwatch implements \BMO {
 	}
 
 	// alert_count is the number of reminders already sent. This returns the
-	// wait until the next reminder; Escalating deliberately opens with two
-	// 5-minute gaps, then grows on the same 5-minute base up to the daily cap.
+	// wait until the next reminder using a Fibonacci-style multiplier sequence
+	// (1, 1, 2, 3, 5, 8, …) on a 5-minute base, capped at the daily ceiling.
+	// alertCount 0 and 1 both map to multiplier 1 (5 m), giving exactly two
+	// 5-minute gaps before the sequence begins to grow.
 	private function escalatingRepeatIntervalSeconds(int $alertCount): int {
-		$step = max(1, $alertCount);
+		$step = max(1, $alertCount + 1);
 		$previous = 0;
 		$current = 1;
 

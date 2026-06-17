@@ -160,7 +160,7 @@ function should_auto_disable_absent(array $registration, int $thresholdSeconds, 
 function escalating_interval_seconds(int $alertCount): int {
 	$base = 300;
 	$ceiling = 86400;
-	$step = max(1, $alertCount);
+	$step = max(1, $alertCount + 1);
 	$previous = 0;
 	$current = 1;
 	for ($i = 1; $i < $step; $i++) {
@@ -619,12 +619,12 @@ $db->prepare('UPDATE registrationwatch_registrations SET enabled = CASE WHEN aut
 assert_true((int)$db->query("SELECT enabled FROM registrationwatch_registrations WHERE id = {$regB}")->fetchColumn() === 1, 'returning auto-disabled registration should re-enable automatically');
 
 assert_true(escalating_interval_seconds(1) === 300, 'escalating reminder 1 should wait 5 minutes');
-assert_true(escalating_interval_seconds(2) === 300, 'escalating reminder 2 should wait 5 minutes');
-assert_true(escalating_interval_seconds(3) === 600, 'escalating reminder 3 should wait 10 minutes');
-assert_true(escalating_interval_seconds(4) === 900, 'escalating reminder 4 should wait 15 minutes');
-assert_true(escalating_interval_seconds(5) === 1500, 'escalating reminder 5 should wait 25 minutes');
-assert_true(escalating_interval_seconds(6) === 2400, 'escalating reminder 6 should wait 40 minutes');
-assert_true(escalating_interval_seconds(7) === 3900, 'escalating reminder 7 should wait 65 minutes');
+assert_true(escalating_interval_seconds(2) === 600, 'escalating reminder 2 should wait 10 minutes');
+assert_true(escalating_interval_seconds(3) === 900, 'escalating reminder 3 should wait 15 minutes');
+assert_true(escalating_interval_seconds(4) === 1500, 'escalating reminder 4 should wait 25 minutes');
+assert_true(escalating_interval_seconds(5) === 2400, 'escalating reminder 5 should wait 40 minutes');
+assert_true(escalating_interval_seconds(6) === 3900, 'escalating reminder 6 should wait 65 minutes');
+assert_true(escalating_interval_seconds(7) === 6300, 'escalating reminder 7 should wait 105 minutes');
 assert_true(escalating_interval_seconds(14) === 86400, 'escalating should clamp at daily ceiling');
 assert_true(normalise_repeat_mode('fibonacci') === 'escalating', 'stored fibonacci repeat mode should resolve to escalating');
 assert_true(normalise_repeat_mode('garbage') === 'never', 'unknown repeat mode should fail safe to never');
