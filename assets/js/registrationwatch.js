@@ -200,14 +200,18 @@
 	}
 
 	function rowSnoozeSelectHtml() {
-		return '<select class="form-control input-sm rw-row-snooze">'
-			+ '<option value="">💤 Snooze</option>'
-			+ '<option value="300">Snooze 5m</option>'
-			+ '<option value="900">Snooze 15m</option>'
-			+ '<option value="1800">Snooze 30m</option>'
-			+ '<option value="3600">Snooze 1h</option>'
-			+ '<option value="86400">Snooze 1d</option>'
-			+ '</select>';
+		return '<div class="btn-group rw-row-snooze-group">'
+			+ '<button type="button" class="btn btn-xs btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'
+			+ '💤 Snooze <span class="caret"></span>'
+			+ '</button>'
+			+ '<ul class="dropdown-menu">'
+			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="300">Snooze 5m</a></li>'
+			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="900">Snooze 15m</a></li>'
+			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="1800">Snooze 30m</a></li>'
+			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="3600">Snooze 1h</a></li>'
+			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="86400">Snooze 1d</a></li>'
+			+ '</ul>'
+			+ '</div>';
 	}
 
 	function rowSnoozeInactiveHtml() {
@@ -502,7 +506,7 @@
 		var globalSnoozed = state === 'snoozed';
 		var snoozeCtrlHtml = globalSnoozed ? rowSnoozeInactiveHtml() : rowSnoozeSelectHtml();
 		$('.registrationwatch .rw-monitored-cell, .registrationwatch .rw-alerting-cell').each(function () {
-			$(this).find('.rw-row-snooze, .rw-row-snooze-inactive').replaceWith(snoozeCtrlHtml);
+			$(this).find('.rw-row-snooze-group, .rw-row-snooze-inactive').replaceWith(snoozeCtrlHtml);
 		});
 	}
 
@@ -845,12 +849,13 @@
 			});
 		});
 
-		root.on('change', '.rw-row-snooze', function () {
-			var select = $(this);
-			var row = select.closest('tr');
+		root.on('click', '.rw-row-snooze-option', function (e) {
+			e.preventDefault();
+			var link = $(this);
+			var row = link.closest('tr');
 			var registrationId = row.data('registration-id');
-			var seconds = parseInt(select.val(), 10);
-			select.val('');
+			var seconds = parseInt(link.data('seconds'), 10);
+
 			if (!seconds || [300, 900, 1800, 3600, 86400].indexOf(seconds) === -1) {
 				return;
 			}

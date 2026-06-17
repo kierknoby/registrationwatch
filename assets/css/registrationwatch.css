@@ -401,10 +401,8 @@
         gap: 8px;
 }
 
-.registrationwatch .rw-row-snooze {
-        width: auto;
-        max-width: 130px;
-        flex-shrink: 1;
+.registrationwatch .rw-row-snooze-group {
+        flex-shrink: 0;
 }
 
 .registrationwatch .rw-row-snooze-inactive {

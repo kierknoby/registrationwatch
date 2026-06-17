@@ -207,14 +207,18 @@ $_rwSnoozeSelectHtml = function () use ($monitoringState) {
 	if (($monitoringState['state'] ?? 'active') === 'snoozed') {
 		return '<span class="rw-row-snooze-inactive" title="' . _('Global monitoring snooze is active') . '">💤 ' . _('Snoozed') . '</span>';
 	}
-	return '<select class="form-control input-sm rw-row-snooze">'
-		. '<option value="">💤 Snooze</option>'
-		. '<option value="300">' . _('Snooze 5m') . '</option>'
-		. '<option value="900">' . _('Snooze 15m') . '</option>'
-		. '<option value="1800">' . _('Snooze 30m') . '</option>'
-		. '<option value="3600">' . _('Snooze 1h') . '</option>'
-		. '<option value="86400">' . _('Snooze 1d') . '</option>'
-		. '</select>';
+	return '<div class="btn-group rw-row-snooze-group">'
+		. '<button type="button" class="btn btn-xs btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'
+		. '💤 ' . _('Snooze') . ' <span class="caret"></span>'
+		. '</button>'
+		. '<ul class="dropdown-menu">'
+		. '<li><a href="#" class="rw-row-snooze-option" data-seconds="300">' . _('Snooze 5m') . '</a></li>'
+		. '<li><a href="#" class="rw-row-snooze-option" data-seconds="900">' . _('Snooze 15m') . '</a></li>'
+		. '<li><a href="#" class="rw-row-snooze-option" data-seconds="1800">' . _('Snooze 30m') . '</a></li>'
+		. '<li><a href="#" class="rw-row-snooze-option" data-seconds="3600">' . _('Snooze 1h') . '</a></li>'
+		. '<li><a href="#" class="rw-row-snooze-option" data-seconds="86400">' . _('Snooze 1d') . '</a></li>'
+		. '</ul>'
+		. '</div>';
 };
 
 $_rwMapDetailRows = function ($registration) use ($_rwContactExpiryText, $_rwIsRegisteredNoQualify) {
