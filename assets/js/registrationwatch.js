@@ -527,6 +527,9 @@
 	}
 
 	$(function () {
+		if (window.RegistrationWatchInitialised) { return; }
+		window.RegistrationWatchInitialised = true;
+
 		var root = $('.registrationwatch');
 		var refreshButton = $('#rw-refresh');
 		var alertSettingsDirty = false;
@@ -1214,7 +1217,7 @@
                 });
         }
 
-        $(document).on('input', '.registrationwatch .rw-registration-notes', function() {
+        $(document).off('input.registrationwatchNotes', '.registrationwatch .rw-registration-notes').on('input.registrationwatchNotes', '.registrationwatch .rw-registration-notes', function() {
                 var input = this;
                 var registrationId = $(input).data('registration-id') || '';
 
@@ -1372,7 +1375,7 @@
                 applyAllLimits(false);
         });
 
-        $(document).on('change', '.rw-shared-show-limit', function() {
+        $(document).off('change.registrationwatchShowLimit', '.rw-shared-show-limit').on('change.registrationwatchShowLimit', '.rw-shared-show-limit', function() {
                 var value = normaliseLimit($(this).val());
 
                 syncControls(value);
@@ -1380,7 +1383,7 @@
                 saveShowLimit(value);
         });
 
-        $(document).on('registrationwatch:history-rendered', function() {
+        $(document).off('registrationwatch:history-rendered.rwShowLimit').on('registrationwatch:history-rendered.rwShowLimit', function() {
                 installTableControls();
                 syncControls(currentLimit);
                 applyAllLimits(false);
