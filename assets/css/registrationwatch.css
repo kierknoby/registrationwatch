@@ -393,9 +393,7 @@
         flex-direction: column;
         gap: 3px;
         background: #fdf2f2;
-        border: 1px solid #f5c6cb;
-        border-radius: 3px;
-        padding: 4px 6px;
+        padding: 2px 4px;
 }
 
 .registrationwatch .rw-alerting-indicator {
@@ -410,6 +408,9 @@
         line-height: 1.2;
         padding: 2px 6px;
         font-size: 11px;
+        background-color: #c9302c !important;
+        border-color: #ac2925 !important;
+        color: #fff !important;
 }
 
 .registrationwatch .rw-global-snoozed-label {
@@ -449,6 +450,8 @@
         display: block;
         min-height: 18px;
         margin-top: 4px;
+        position: relative;
+        top: 12px;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-registration-notes,
