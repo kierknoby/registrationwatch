@@ -421,10 +421,6 @@
         background-color: #dff0d8 !important;
 }
 
-.registrationwatch .rw-watched-registrations-table > tbody > tr.rw-row-fault > td {
-        background-color: #f2dede !important;
-}
-
 .registrationwatch .rw-watched-registrations-table > tbody > tr + tr > td {
         border-top-width: 2px;
 }
