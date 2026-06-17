@@ -384,7 +384,7 @@
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-selection {
-        width: 130px;
+        width: 165px;
 }
 
 .registrationwatch .rw-alerting-cell {
@@ -395,8 +395,15 @@
 
 .registrationwatch .rw-monitored-cell {
         display: flex;
-        flex-direction: column;
-        gap: 4px;
+        flex-direction: row;
+        align-items: center;
+        flex-wrap: nowrap;
+        gap: 8px;
+}
+
+.registrationwatch .rw-row-snooze {
+        width: auto;
+        flex-shrink: 1;
 }
 
 .registrationwatch .rw-alerting-indicator {

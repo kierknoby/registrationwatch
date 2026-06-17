@@ -204,8 +204,8 @@ $_rwIsActivelyAlerting = function ($registration) {
 };
 
 $_rwSnoozeSelectHtml = function () {
-	return '<select class="form-control input-sm rw-row-snooze">'
-		. '<option value="">' . _('Snooze...') . '</option>'
+	return '<select class="input-sm rw-row-snooze">'
+		. '<option value="">💤 Snooze</option>'
 		. '<option value="300">' . _('Snooze 5m') . '</option>'
 		. '<option value="900">' . _('Snooze 15m') . '</option>'
 		. '<option value="1800">' . _('Snooze 30m') . '</option>'

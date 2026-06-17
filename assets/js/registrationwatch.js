@@ -199,32 +199,41 @@
 		return status === 'unreachable' || status === 'not registered';
 	}
 
-	function watchedExtensionRowHtml(registration) {
-		var id = parseInt(registration.registration_id || registration.id, 10) || 0;
-		var notes = registration.notes || '';
-		var notesStatus = registration.notes_updated_at ? 'Saved ' + registration.notes_updated_at : '';
-		var rowSnoozeHtml = '<select class="form-control input-sm rw-row-snooze">'
-			+ '<option value="">Snooze...</option>'
+	function rowSnoozeSelectHtml() {
+		return '<select class="input-sm rw-row-snooze">'
+			+ '<option value="">💤 Snooze</option>'
 			+ '<option value="300">Snooze 5m</option>'
 			+ '<option value="900">Snooze 15m</option>'
 			+ '<option value="1800">Snooze 30m</option>'
 			+ '<option value="3600">Snooze 1h</option>'
 			+ '<option value="86400">Snooze 1d</option>'
 			+ '</select>';
+	}
+
+	function buildMonitoredCellHtml(enabled) {
+		var toggleHtml = '<label class="rw-toggle">'
+			+ '<input type="checkbox" class="rw-enabled"' + (enabled ? ' checked' : '') + '>'
+			+ '<span class="rw-toggle-slider"></span>'
+			+ '</label>';
+		if (enabled) {
+			return '<div class="rw-monitored-cell">' + toggleHtml + rowSnoozeSelectHtml() + '</div>';
+		}
+		return toggleHtml;
+	}
+
+	function watchedExtensionRowHtml(registration) {
+		var id = parseInt(registration.registration_id || registration.id, 10) || 0;
+		var notes = registration.notes || '';
+		var notesStatus = registration.notes_updated_at ? 'Saved ' + registration.notes_updated_at : '';
 		var monitoredCell;
 		if (isActivelyAlerting(registration)) {
 			monitoredCell = '<div class="rw-alerting-cell">'
 				+ '<small class="rw-alerting-indicator">Actively alerting</small>'
 				+ '<button type="button" class="btn btn-xs btn-warning rw-disable-alerting" data-registration-id="' + id + '" title="Disable alerting for this extension">Disable alerting</button>'
-				+ rowSnoozeHtml
-				+ '</div>';
-		} else if (parseInt(registration.enabled, 10)) {
-			monitoredCell = '<div class="rw-monitored-cell">'
-				+ '<label class="rw-toggle"><input type="checkbox" class="rw-enabled" checked><span class="rw-toggle-slider"></span></label>'
-				+ rowSnoozeHtml
+				+ rowSnoozeSelectHtml()
 				+ '</div>';
 		} else {
-			monitoredCell = '<label class="rw-toggle"><input type="checkbox" class="rw-enabled"><span class="rw-toggle-slider"></span></label>';
+			monitoredCell = buildMonitoredCellHtml(parseInt(registration.enabled, 10));
 		}
 
 		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '"' + (parseInt(registration.enabled, 10) ? ' class="rw-row-enabled"' : '') + '>' +
@@ -553,12 +562,14 @@
 					if (response.monitoringState) {
 						updateMonitoringBanner(response.monitoringState);
 					}
+					input.closest('td').html(buildMonitoredCellHtml(enabled));
 				}
 			}).fail(function () {
 				input.prop('checked', !enabled);
 				row.toggleClass('rw-row-enabled', enabled === 0);
 				showMessage('Unable to save watch setting.', 'error');
 			}).always(function () {
+				// input may be detached if cell was rewritten on success; safe to ignore
 				input.prop('disabled', false);
 			});
 		});
