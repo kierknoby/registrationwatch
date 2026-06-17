@@ -96,6 +96,42 @@
 
 	window.RegistrationWatchToken = registrationWatchToken;
 
+	window.rwSaveUiSetting = function (key, value) {
+		var token = window.RegistrationWatchToken ? window.RegistrationWatchToken() : '';
+		$.ajax({
+			url: 'ajax.php?module=registrationwatch&command=saveuisetting',
+			type: 'POST',
+			data: { token: token, key: key, value: String(value) }
+		});
+	};
+
+	var rwTableSort = {
+		watchedKey: 'extension', watchedDir: 'asc',
+		statusKey: 'time', statusDir: 'desc',
+		alertKey: 'time', alertDir: 'desc',
+		latestWatched: null, latestStatus: null, latestAlert: null
+	};
+
+	function applySortToArray(arr, key, dir, fieldMap) {
+		return arr.slice().sort(function (a, b) {
+			var field = fieldMap[key] || key;
+			var va = String(a[field] === null || a[field] === undefined ? '' : a[field]);
+			var vb = String(b[field] === null || b[field] === undefined ? '' : b[field]);
+			var na = parseFloat(va);
+			var nb = parseFloat(vb);
+			var cmp = (!isNaN(na) && !isNaN(nb)) ? (na - nb) : va.toLowerCase().localeCompare(vb.toLowerCase());
+			return dir === 'desc' ? -cmp : cmp;
+		});
+	}
+
+	function updateSortHeaders(tableSelector, sortKey, sortDir) {
+		$(tableSelector + ' thead th[data-sort-key]').each(function () {
+			var key = $(this).attr('data-sort-key');
+			$(this).find('.rw-sort-arrow').html(key === sortKey ? (sortDir === 'asc' ? '&#9650;' : '&#9660;') : '');
+			$(this).toggleClass('rw-sort-active', key === sortKey);
+		});
+	}
+
 	function registrationRows(registrationId) {
 		return $('.registrationwatch tr[data-registration-id]').filter(function () {
 			return String($(this).data('registration-id')) === String(registrationId);
@@ -171,10 +207,10 @@
 				'<thead>' +
 					'<tr>' +
 						'<th>Monitored</th>' +
-						'<th>Extension</th>' +
-						'<th>Description</th>' +
-						'<th>Repeat alerts</th>' +
-						'<th>Notes</th>' +
+						'<th data-sort-key="extension">Extension <span class="rw-sort-arrow"></span></th>' +
+						'<th data-sort-key="description">Description <span class="rw-sort-arrow"></span></th>' +
+						'<th data-sort-key="repeat">Repeat alerts <span class="rw-sort-arrow"></span></th>' +
+						'<th data-sort-key="notes">Notes <span class="rw-sort-arrow"></span></th>' +
 					'</tr>' +
 				'</thead>' +
 				'<tbody></tbody>' +
@@ -276,6 +312,10 @@
 			return;
 		}
 
+		rwTableSort.latestWatched = registrations;
+		var watchedFieldMap = { extension: 'extension', description: 'description', repeat: 'repeat_mode', notes: 'notes' };
+		var sorted = applySortToArray(registrations || [], rwTableSort.watchedKey, rwTableSort.watchedDir, watchedFieldMap);
+
 		var rows = [];
 		var activeNote = $('.registrationwatch .rw-registration-notes:focus');
 		var activeNoteId = activeNote.length ? String(activeNote.data('registration-id') || '') : '';
@@ -285,7 +325,7 @@
 			end: activeNote[0].selectionEnd
 		} : null;
 
-		$.each(registrations || [], function (_, registration) {
+		$.each(sorted, function (_, registration) {
 			if (registration.discovered !== undefined && parseInt(registration.discovered, 10) === 0) {
 				return;
 			}
@@ -304,6 +344,7 @@
 		}
 
 		$panel.find('.rw-registrations tbody').html(rows.join(''));
+		updateSortHeaders('.rw-watched-registrations-table', rwTableSort.watchedKey, rwTableSort.watchedDir);
 		$panel.find('.rw-repeat-mode').each(function () {
 			$(this).data('previous-value', $(this).val() || '');
 		});
@@ -335,8 +376,11 @@
 	}
 
 	function renderHistoryRows(history) {
+		rwTableSort.latestStatus = history;
+		var statusFieldMap = { time: 'created_at', extension: 'extension', from: 'from_state', to: 'to_state', source: 'source', reason: 'reason', latency: 'latency_ms' };
+		var sorted = applySortToArray(history || [], rwTableSort.statusKey, rwTableSort.statusDir, statusFieldMap);
 		var rows = [];
-		$.each(history || [], function (_, entry) {
+		$.each(sorted, function (_, entry) {
 			var latency = entry.latency_ms ? escapeHtml(entry.latency_ms) + ' ms' : '-';
 			var id = parseInt(entry.id, 10) || 0;
 			rows.push(
@@ -356,6 +400,7 @@
 		$('.rw-history tbody').html(rows.join(''));
 		$('.rw-history-empty').toggle(rows.length === 0);
 		$('.rw-history-wrap').toggle(rows.length > 0);
+		updateSortHeaders('.rw-history', rwTableSort.statusKey, rwTableSort.statusDir);
 		$(document).trigger('registrationwatch:history-rendered');
 	}
 
@@ -371,8 +416,11 @@
 	}
 
 	function renderAlertHistoryRows(history) {
+		rwTableSort.latestAlert = history;
+		var alertFieldMap = { time: 'sent_at', extension: 'extension', type: 'alert_type', status: 'status', recipient: 'recipient', result: 'result', error: 'error' };
+		var sorted = applySortToArray(history || [], rwTableSort.alertKey, rwTableSort.alertDir, alertFieldMap);
 		var rows = [];
-		$.each(history || [], function (_, entry) {
+		$.each(sorted, function (_, entry) {
 			var id = parseInt(entry.id, 10) || 0;
 			rows.push(
 				'<tr data-history-id="' + id + '" class="' + alertHistoryRowClass(entry.alert_type) + '">' +
@@ -391,6 +439,7 @@
 		$('.rw-alert-history tbody').html(rows.join(''));
 		$('.rw-alert-history-empty').toggle(rows.length === 0);
 		$('.rw-alert-history-wrap').toggle(rows.length > 0);
+		updateSortHeaders('.rw-alert-history', rwTableSort.alertKey, rwTableSort.alertDir);
 		$(document).trigger('registrationwatch:history-rendered');
 	}
 
@@ -533,6 +582,44 @@
 	$(function () {
 		if (window.RegistrationWatchInitialised) { return; }
 		window.RegistrationWatchInitialised = true;
+
+		var rwUi = window.rwUiSettings || {};
+		rwTableSort.watchedKey = rwUi.watchedSortKey || 'extension';
+		rwTableSort.watchedDir = rwUi.watchedSortDir || 'asc';
+		rwTableSort.statusKey = rwUi.statusHistorySortKey || 'time';
+		rwTableSort.statusDir = rwUi.statusHistorySortDir || 'desc';
+		rwTableSort.alertKey = rwUi.alertHistorySortKey || 'time';
+		rwTableSort.alertDir = rwUi.alertHistorySortDir || 'desc';
+		updateSortHeaders('.rw-watched-registrations-table', rwTableSort.watchedKey, rwTableSort.watchedDir);
+		updateSortHeaders('.rw-history', rwTableSort.statusKey, rwTableSort.statusDir);
+		updateSortHeaders('.rw-alert-history', rwTableSort.alertKey, rwTableSort.alertDir);
+
+		$(document).on('click', '.rw-watched-registrations-table thead th[data-sort-key]', function () {
+			var key = $(this).attr('data-sort-key');
+			rwTableSort.watchedDir = rwTableSort.watchedKey === key ? (rwTableSort.watchedDir === 'asc' ? 'desc' : 'asc') : 'asc';
+			rwTableSort.watchedKey = key;
+			window.rwSaveUiSetting('ui_watched_sort_key', rwTableSort.watchedKey);
+			window.rwSaveUiSetting('ui_watched_sort_dir', rwTableSort.watchedDir);
+			if (rwTableSort.latestWatched) { renderWatchedExtensionsTable(rwTableSort.latestWatched); }
+		});
+
+		$(document).on('click', '.rw-history thead th[data-sort-key]', function () {
+			var key = $(this).attr('data-sort-key');
+			rwTableSort.statusDir = rwTableSort.statusKey === key ? (rwTableSort.statusDir === 'asc' ? 'desc' : 'asc') : 'asc';
+			rwTableSort.statusKey = key;
+			window.rwSaveUiSetting('ui_status_history_sort_key', rwTableSort.statusKey);
+			window.rwSaveUiSetting('ui_status_history_sort_dir', rwTableSort.statusDir);
+			if (rwTableSort.latestStatus) { renderHistoryRows(rwTableSort.latestStatus); }
+		});
+
+		$(document).on('click', '.rw-alert-history thead th[data-sort-key]', function () {
+			var key = $(this).attr('data-sort-key');
+			rwTableSort.alertDir = rwTableSort.alertKey === key ? (rwTableSort.alertDir === 'asc' ? 'desc' : 'asc') : 'asc';
+			rwTableSort.alertKey = key;
+			window.rwSaveUiSetting('ui_alert_history_sort_key', rwTableSort.alertKey);
+			window.rwSaveUiSetting('ui_alert_history_sort_dir', rwTableSort.alertDir);
+			if (rwTableSort.latestAlert) { renderAlertHistoryRows(rwTableSort.latestAlert); }
+		});
 
 		var root = $('.registrationwatch');
 		var refreshButton = $('#rw-refresh');

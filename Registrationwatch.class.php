@@ -57,6 +57,15 @@ class Registrationwatch implements \BMO {
 		'status_history_prune_policy' => 'never',
 		'alert_history_prune_policy' => 'never',
 		'monitoring_snoozed_until' => '',
+		'ui_map_view_mode' => 'card',
+		'ui_map_sort_key' => 'extension',
+		'ui_map_sort_dir' => 'asc',
+		'ui_watched_sort_key' => 'extension',
+		'ui_watched_sort_dir' => 'asc',
+		'ui_status_history_sort_key' => 'time',
+		'ui_status_history_sort_dir' => 'desc',
+		'ui_alert_history_sort_key' => 'time',
+		'ui_alert_history_sort_dir' => 'desc',
 	];
 
 	/** @var \FreePBX */
@@ -254,6 +263,7 @@ class Registrationwatch implements \BMO {
 			case 'setrepeatmode':
 			case 'savenotes':
 			case 'saveshowlimit':
+			case 'saveuisetting':
 			case 'savealerts':
 			case 'savetopology':
 			case 'testemail':
@@ -291,6 +301,8 @@ class Registrationwatch implements \BMO {
 				return $this->handleSaveNotes();
 			case 'saveshowlimit':
 				return $this->handleSaveShowLimit();
+			case 'saveuisetting':
+				return $this->handleSaveUiSetting();
 			case 'savealerts':
 				return $this->handleSaveAlerts();
 			case 'savetopology':
@@ -498,6 +510,31 @@ class Registrationwatch implements \BMO {
 			'message' => _('Show limit saved.'),
 			'show_limit' => $showLimit,
 		];
+	}
+
+	private function handleSaveUiSetting(): array {
+		$dirs = ['asc', 'desc'];
+		$rules = [
+			'ui_map_view_mode'              => ['card', 'row'],
+			'ui_map_sort_key'               => ['extension', 'status', 'description', 'device_ip', 'network_ip', 'device', 'contact_expires', 'qualify', 'latency'],
+			'ui_map_sort_dir'               => $dirs,
+			'ui_watched_sort_key'           => ['extension', 'description', 'repeat', 'notes'],
+			'ui_watched_sort_dir'           => $dirs,
+			'ui_status_history_sort_key'    => ['time', 'extension', 'from', 'to', 'source', 'reason', 'latency'],
+			'ui_status_history_sort_dir'    => $dirs,
+			'ui_alert_history_sort_key'     => ['time', 'extension', 'type', 'status', 'recipient', 'result', 'error'],
+			'ui_alert_history_sort_dir'     => $dirs,
+		];
+		$key = isset($_REQUEST['key']) ? (string)$_REQUEST['key'] : '';
+		$value = isset($_REQUEST['value']) ? strtolower(trim((string)$_REQUEST['value'])) : '';
+		if (!array_key_exists($key, $rules)) {
+			return ['status' => false, 'message' => _('Unknown UI setting.')];
+		}
+		if (!in_array($value, $rules[$key], true)) {
+			return ['status' => false, 'message' => _('Invalid value for UI setting.')];
+		}
+		$this->setSetting($key, $value);
+		return ['status' => true];
 	}
 
 	private function handleSaveAlerts(): array {

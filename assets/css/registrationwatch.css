@@ -330,16 +330,16 @@
 	max-width: 160px;
 }
 
-.registrationwatch .rw-map-row-view th[data-sort-key] {
+.registrationwatch th[data-sort-key] {
 	cursor: pointer;
 	user-select: none;
 }
 
-.registrationwatch .rw-map-row-view th[data-sort-key]:hover {
+.registrationwatch th[data-sort-key]:hover {
 	background-color: #f5f5f5;
 }
 
-.registrationwatch .rw-map-row-view th.rw-sort-active {
+.registrationwatch th.rw-sort-active {
 	background-color: #eaeaea;
 }
 

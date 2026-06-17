@@ -32,6 +32,15 @@ $uiShowLimit = isset($alertSettings['ui_show_limit']) ? strtolower((string)$aler
 if (!in_array($uiShowLimit, ['6', '30', '60', '120', 'all'], true)) {
 	$uiShowLimit = '6';
 }
+$uiMapViewMode = in_array($alertSettings['ui_map_view_mode'] ?? 'card', ['card', 'row'], true) ? $alertSettings['ui_map_view_mode'] : 'card';
+$uiMapSortKey = (string)($alertSettings['ui_map_sort_key'] ?? 'extension');
+$uiMapSortDir = in_array($alertSettings['ui_map_sort_dir'] ?? 'asc', ['asc', 'desc'], true) ? $alertSettings['ui_map_sort_dir'] : 'asc';
+$uiWatchedSortKey = (string)($alertSettings['ui_watched_sort_key'] ?? 'extension');
+$uiWatchedSortDir = in_array($alertSettings['ui_watched_sort_dir'] ?? 'asc', ['asc', 'desc'], true) ? $alertSettings['ui_watched_sort_dir'] : 'asc';
+$uiStatusHistorySortKey = (string)($alertSettings['ui_status_history_sort_key'] ?? 'time');
+$uiStatusHistorySortDir = in_array($alertSettings['ui_status_history_sort_dir'] ?? 'desc', ['asc', 'desc'], true) ? $alertSettings['ui_status_history_sort_dir'] : 'desc';
+$uiAlertHistorySortKey = (string)($alertSettings['ui_alert_history_sort_key'] ?? 'time');
+$uiAlertHistorySortDir = in_array($alertSettings['ui_alert_history_sort_dir'] ?? 'desc', ['asc', 'desc'], true) ? $alertSettings['ui_alert_history_sort_dir'] : 'desc';
 $statusPrunePolicy = isset($pruneSettings['status_history_prune_policy']) ? strtolower((string)$pruneSettings['status_history_prune_policy']) : 'never';
 $alertPrunePolicy = isset($pruneSettings['alert_history_prune_policy']) ? strtolower((string)$pruneSettings['alert_history_prune_policy']) : 'never';
 if (!in_array($statusPrunePolicy, ['hourly', 'daily', 'monthly', 'yearly', 'never'], true)) {
@@ -438,10 +447,10 @@ $_rwAssetVer = max(
 								<thead>
 									<tr>
 										<th><?php echo _('Monitored'); ?></th>
-										<th><?php echo _('Extension'); ?></th>
-										<th><?php echo _('Description'); ?></th>
-										<th><?php echo _('Repeat alerts'); ?></th>
-										<th><?php echo _('Notes'); ?></th>
+										<th data-sort-key="extension"><?php echo _('Extension'); ?> <span class="rw-sort-arrow"></span></th>
+										<th data-sort-key="description"><?php echo _('Description'); ?> <span class="rw-sort-arrow"></span></th>
+										<th data-sort-key="repeat"><?php echo _('Repeat alerts'); ?> <span class="rw-sort-arrow"></span></th>
+										<th data-sort-key="notes"><?php echo _('Notes'); ?> <span class="rw-sort-arrow"></span></th>
 									</tr>
 								</thead>
 								<tbody>
@@ -554,13 +563,13 @@ $_rwAssetVer = max(
 						<table class="table table-striped table-condensed rw-history">
 							<thead>
 								<tr>
-									<th><?php echo _('Time'); ?></th>
-									<th><?php echo _('Extension'); ?></th>
-									<th><?php echo _('From'); ?></th>
-									<th><?php echo _('To'); ?></th>
-									<th><?php echo _('Source'); ?></th>
-									<th><?php echo _('Reason'); ?></th>
-									<th><?php echo _('Latency'); ?></th>
+									<th data-sort-key="time"><?php echo _('Time'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="extension"><?php echo _('Extension'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="from"><?php echo _('From'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="to"><?php echo _('To'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="source"><?php echo _('Source'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="reason"><?php echo _('Reason'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="latency"><?php echo _('Latency'); ?> <span class="rw-sort-arrow"></span></th>
 									<th><?php echo _('Actions'); ?></th>
 								</tr>
 							</thead>
@@ -625,13 +634,13 @@ $_rwAssetVer = max(
 						<table class="table table-striped table-condensed rw-alert-history">
 							<thead>
 								<tr>
-									<th><?php echo _('Time'); ?></th>
-									<th><?php echo _('Extension'); ?></th>
-									<th><?php echo _('Type'); ?></th>
-									<th><?php echo _('Status'); ?></th>
-									<th><?php echo _('Recipient'); ?></th>
-									<th><?php echo _('Result'); ?></th>
-									<th><?php echo _('Error'); ?></th>
+									<th data-sort-key="time"><?php echo _('Time'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="extension"><?php echo _('Extension'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="type"><?php echo _('Type'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="status"><?php echo _('Status'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="recipient"><?php echo _('Recipient'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="result"><?php echo _('Result'); ?> <span class="rw-sort-arrow"></span></th>
+									<th data-sort-key="error"><?php echo _('Error'); ?> <span class="rw-sort-arrow"></span></th>
 									<th><?php echo _('Actions'); ?></th>
 								</tr>
 							</thead>
@@ -669,6 +678,16 @@ $_rwAssetVer = max(
 	<span id="rw-database-time"><?php echo htmlspecialchars((string)($timeDiagnostics['database_time'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></span>
 </p>
 
+<script>
+window.rwUiSettings = {
+	watchedSortKey: <?php echo json_encode($uiWatchedSortKey); ?>,
+	watchedSortDir: <?php echo json_encode($uiWatchedSortDir); ?>,
+	statusHistorySortKey: <?php echo json_encode($uiStatusHistorySortKey); ?>,
+	statusHistorySortDir: <?php echo json_encode($uiStatusHistorySortDir); ?>,
+	alertHistorySortKey: <?php echo json_encode($uiAlertHistorySortKey); ?>,
+	alertHistorySortDir: <?php echo json_encode($uiAlertHistorySortDir); ?>
+};
+</script>
 <script src="modules/registrationwatch/assets/js/registrationwatch.js?v=<?php echo $_rwAssetVer; ?>"></script>
 <script>
 	// Registration map renderer. Auto-refresh uses the read-only topology AJAX path in registrationwatch.js.
@@ -691,9 +710,9 @@ $_rwAssetVer = max(
 		const textStatus = <?php echo json_encode(_('Status')); ?>;
 		const textDescription = <?php echo json_encode(_('Description')); ?>;
 		let latestMapRegistrations = <?php echo json_encode($mapRegistrations); ?>;
-		let statusMapViewMode = localStorage.getItem('rw-map-view-mode') || 'card';
-		let rowSortKey = localStorage.getItem('rw-map-row-sort-key') || 'extension';
-		let rowSortDir = localStorage.getItem('rw-map-row-sort-dir') || 'asc';
+		let statusMapViewMode = <?php echo json_encode($uiMapViewMode); ?>;
+		let rowSortKey = <?php echo json_encode($uiMapSortKey); ?>;
+		let rowSortDir = <?php echo json_encode($uiMapSortDir); ?>;
 		const rwInitialMonitoringState = <?php echo json_encode($monitoringState); ?>;
 		if (window.RegistrationWatchUpdateMonitoringBanner) {
 			window.RegistrationWatchUpdateMonitoringBanner(rwInitialMonitoringState);
@@ -999,8 +1018,8 @@ $_rwAssetVer = max(
 					rowSortKey = key;
 					rowSortDir = 'asc';
 				}
-				localStorage.setItem('rw-map-row-sort-key', rowSortKey);
-				localStorage.setItem('rw-map-row-sort-dir', rowSortDir);
+				if (window.rwSaveUiSetting) { window.rwSaveUiSetting('ui_map_sort_key', rowSortKey); }
+				if (window.rwSaveUiSetting) { window.rwSaveUiSetting('ui_map_sort_dir', rowSortDir); }
 				renderRegistrationMap(latestMapRegistrations);
 			});
 		}
@@ -1010,7 +1029,7 @@ $_rwAssetVer = max(
 		if (btnViewCard) {
 			btnViewCard.addEventListener('click', function() {
 				statusMapViewMode = 'card';
-				localStorage.setItem('rw-map-view-mode', 'card');
+				if (window.rwSaveUiSetting) { window.rwSaveUiSetting('ui_map_view_mode', 'card'); }
 				applyViewToggleState();
 				renderRegistrationMap(latestMapRegistrations);
 			});
@@ -1018,7 +1037,7 @@ $_rwAssetVer = max(
 		if (btnViewRow) {
 			btnViewRow.addEventListener('click', function() {
 				statusMapViewMode = 'row';
-				localStorage.setItem('rw-map-view-mode', 'row');
+				if (window.rwSaveUiSetting) { window.rwSaveUiSetting('ui_map_view_mode', 'row'); }
 				applyViewToggleState();
 				renderRegistrationMap(latestMapRegistrations);
 			});
