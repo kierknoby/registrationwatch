@@ -322,6 +322,7 @@ class Registrationwatch implements \BMO {
 				'status' => $data['refreshError'] === '',
 				'message' => $data['refreshError'] === '' ? _('Registration status refreshed.') : $data['refreshError'],
 				'registrations' => $data['registrations'],
+				'watchedExtensions' => $data['watchedExtensions'],
 				'statusHistory' => $data['statusHistory'],
 				'alertHistory' => $data['alertHistory'],
 				'lastRefresh' => $data['lastRefresh'],
@@ -344,11 +345,19 @@ class Registrationwatch implements \BMO {
 		}
 
 		$db = $this->db();
-		$stmt = $db->prepare('UPDATE registrationwatch_registrations SET enabled = :enabled, updated_at = :updated_at WHERE id = :id');
+		$extStmt = $db->prepare('SELECT extension FROM registrationwatch_registrations WHERE id = :id');
+		$extStmt->execute([':id' => $registrationId]);
+		$extension = (string)($extStmt->fetchColumn() ?? '');
+
+		if ($extension === '') {
+			return ['status' => false, 'message' => _('Missing watched registration.')];
+		}
+
+		$stmt = $db->prepare('UPDATE registrationwatch_registrations SET enabled = :enabled, updated_at = :updated_at WHERE extension = :extension');
 		$stmt->execute([
 			':enabled' => $enabled,
 			':updated_at' => $this->now(),
-			':id' => $registrationId,
+			':extension' => $extension,
 		]);
 
 		return [
@@ -370,23 +379,37 @@ class Registrationwatch implements \BMO {
 
 		$repeatMode = $rawMode === '' ? null : $this->normaliseRepeatMode($rawMode);
 		$now = $this->now();
-		$stmt = $this->db()->prepare(
+		$db = $this->db();
+		$extStmt = $db->prepare('SELECT extension FROM registrationwatch_registrations WHERE id = :id');
+		$extStmt->execute([':id' => $registrationId]);
+		$extension = (string)($extStmt->fetchColumn() ?? '');
+
+		if ($extension === '') {
+			return ['status' => false, 'message' => _('Missing watched registration.')];
+		}
+
+		$stmt = $db->prepare(
 			'UPDATE registrationwatch_registrations
 			SET repeat_mode = :repeat_mode,
 				updated_at = :updated_at
-			WHERE id = :id'
+			WHERE extension = :extension'
 		);
 		$stmt->execute([
 			':repeat_mode' => $repeatMode,
 			':updated_at' => $now,
-			':id' => $registrationId,
+			':extension' => $extension,
 		]);
 
 		$settings = $this->getAlertSettings();
 		$resolvedMode = $this->resolveRepeatMode($repeatMode, $settings);
 		if ($resolvedMode === self::REPEAT_MODE_NEVER) {
-			$stmt = $this->db()->prepare('DELETE FROM registrationwatch_alert_escalation WHERE registration_id = :registration_id');
-			$stmt->execute([':registration_id' => $registrationId]);
+			$stmt = $db->prepare(
+				'DELETE FROM registrationwatch_alert_escalation
+				WHERE registration_id IN (
+					SELECT id FROM registrationwatch_registrations WHERE extension = :extension
+				)'
+			);
+			$stmt->execute([':extension' => $extension]);
 		}
 
 		return [
@@ -416,18 +439,27 @@ class Registrationwatch implements \BMO {
 		$now = $this->now();
 		$notesUpdatedAt = $notes === '' ? null : $now;
 
-		$stmt = $this->db()->prepare(
+		$db = $this->db();
+		$extStmt = $db->prepare('SELECT extension FROM registrationwatch_registrations WHERE id = :id');
+		$extStmt->execute([':id' => $registrationId]);
+		$extension = (string)($extStmt->fetchColumn() ?? '');
+
+		if ($extension === '') {
+			return ['status' => false, 'message' => _('Missing watched registration.')];
+		}
+
+		$stmt = $db->prepare(
 			'UPDATE registrationwatch_registrations
 			SET notes = :notes,
 				notes_updated_at = :notes_updated_at,
 				updated_at = :updated_at
-			WHERE id = :id'
+			WHERE extension = :extension'
 		);
 		$stmt->execute([
 			':notes' => $notes,
 			':notes_updated_at' => $notesUpdatedAt,
 			':updated_at' => $now,
-			':id' => $registrationId,
+			':extension' => $extension,
 		]);
 
 		return [
@@ -587,6 +619,7 @@ class Registrationwatch implements \BMO {
 			return [
 				'status' => true,
 				'registrations' => $this->getRegistrationMapRows(),
+				'watchedExtensions' => $this->getWatchedExtensionGroups(),
 				'statusHistory' => $this->getStatusHistory(),
 				'alertHistory' => $this->getAlertHistory(),
 				'timeDiagnostics' => $this->getTimeDiagnostics(),
@@ -2904,6 +2937,68 @@ class Registrationwatch implements \BMO {
 		}
 
 		return $rows;
+	}
+
+	private function getWatchedExtensionGroups(): array {
+		$all = $this->getStoredRegistrations();
+		$byExtension = [];
+		foreach ($all as $row) {
+			$ext = (string)($row['extension'] ?? '');
+			$byExtension[$ext][] = $row;
+		}
+
+		$groups = [];
+		foreach ($byExtension as $contacts) {
+			usort($contacts, function ($a, $b) {
+				return (int)($a['id'] ?? 0) - (int)($b['id'] ?? 0);
+			});
+			$primary = $contacts[0];
+
+			// Worst status wins: any unhealthy contact makes the group unhealthy.
+			$groupStatus = (string)($primary['last_known_status'] ?? self::STATUS_UNKNOWN);
+			$groupRank = $this->statusRank($groupStatus);
+			foreach ($contacts as $contact) {
+				$s = (string)($contact['last_known_status'] ?? self::STATUS_UNKNOWN);
+				$rank = $this->statusRank($s);
+				if ($rank < $groupRank) {
+					$groupRank = $rank;
+					$groupStatus = $s;
+				}
+			}
+
+			$enabled = 0;
+			foreach ($contacts as $contact) {
+				if ((int)($contact['enabled'] ?? 0)) {
+					$enabled = 1;
+					break;
+				}
+			}
+
+			$discovered = 0;
+			foreach ($contacts as $contact) {
+				if ((int)($contact['discovered'] ?? 0)) {
+					$discovered = 1;
+					break;
+				}
+			}
+
+			$groups[] = [
+				'id' => (int)($primary['id'] ?? 0),
+				'registration_id' => (int)($primary['id'] ?? 0),
+				'registration_key' => (string)($primary['registration_key'] ?? ''),
+				'extension' => (string)($primary['extension'] ?? ''),
+				'description' => $primary['description'] ?? null,
+				'notes' => (string)($primary['notes'] ?? ''),
+				'notes_updated_at' => $primary['notes_updated_at'] ?? null,
+				'enabled' => $enabled,
+				'repeat_mode' => $primary['repeat_mode'] ?? null,
+				'last_known_status' => $groupStatus,
+				'status' => $groupStatus,
+				'discovered' => $discovered,
+			];
+		}
+
+		return $groups;
 	}
 
 	private function getLastRefreshTime(): string {

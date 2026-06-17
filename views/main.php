@@ -20,6 +20,7 @@ if (!defined('FREEPBX_IS_AUTH')) {
 }
 
 $registrations = isset($registrations) && is_array($registrations) ? $registrations : [];
+$watchedExtensions = isset($watchedExtensions) && is_array($watchedExtensions) ? $watchedExtensions : [];
 $statusHistory = isset($statusHistory) && is_array($statusHistory) ? $statusHistory : [];
 $alertSettings = isset($alertSettings) && is_array($alertSettings) ? $alertSettings : [];
 $pruneSettings = isset($pruneSettings) && is_array($pruneSettings) ? $pruneSettings : [];
@@ -422,7 +423,7 @@ $_rwAssetVer = max(
 					<h3 class="panel-title"><?php echo _('Watched Extensions'); ?></h3>
 				</div>
 				<div class="panel-body">
-					<?php if (empty($registrations)): ?>
+					<?php if (empty($watchedExtensions)): ?>
 						<p class="rw-placeholder"><?php echo htmlspecialchars($registrationEmptyText, ENT_QUOTES, 'UTF-8'); ?></p>
 					<?php else: ?>
 						<div class="table-responsive rw-registrations-wrap">
@@ -444,7 +445,7 @@ $_rwAssetVer = max(
 									</tr>
 								</thead>
 								<tbody>
-									<?php foreach ($registrations as $registration): ?>
+									<?php foreach ($watchedExtensions as $registration): ?>
 										<tr data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>" data-extension="<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?>" <?php echo !empty($registration['enabled']) ? 'class="rw-row-enabled"' : ''; ?>>
 											<td data-label="<?php echo _('Monitored'); ?>">
 												<?php if (!empty($registration['enabled']) && $_rwMonitoringBannerState === 'snoozed'): ?>

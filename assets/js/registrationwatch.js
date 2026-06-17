@@ -698,7 +698,7 @@
 				var interactionActive = isWatchedTableInteractionActive();
 				rwLog('refreshStatus done | interactionActive =', interactionActive, '| will render =', (!isAutomatic || !interactionActive));
 				if (!isAutomatic || !interactionActive) {
-					renderWatchedExtensionsTable(response.registrations);
+					renderWatchedExtensionsTable(response.watchedExtensions !== undefined ? response.watchedExtensions : response.registrations);
 				}
 				renderStatusRows(response.registrations);
 				if (window.RegistrationWatchRenderRegistrationMap) {
