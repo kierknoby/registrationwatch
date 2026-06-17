@@ -2691,10 +2691,9 @@ class Registrationwatch implements \BMO {
 		$message[] = _('Watched registrations included in this pass:');
 		foreach ($registrations as $registration) {
 			$message[] = sprintf(
-				'%s - %s - %s',
+				'%s - %s',
 				$registration['extension'],
-				$this->stateLabel($registration['alert_type']),
-				$this->stateLabel($registration['status'])
+				$this->alertTypePhrase($registration['alert_type'], $registration['status'])
 			);
 		}
 
@@ -2702,6 +2701,13 @@ class Registrationwatch implements \BMO {
 			'subject' => $subject,
 			'message' => implode("\n", $message),
 		];
+	}
+
+	private function alertTypePhrase(string $alertType, string $status): string {
+		if ($alertType === 'recovery') {
+			return 'recovered to ' . $this->stateLabel($status);
+		}
+		return 'became ' . $this->stateLabel($status);
 	}
 
 	private function markReminderCyclesComplete(array $reminderCycles, string $now): void {
