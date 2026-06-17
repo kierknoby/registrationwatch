@@ -246,15 +246,27 @@
 		'</tr>';
 	}
 
+	/* --- DIAGNOSTIC: set window.RW_DEBUG = true in browser console to enable --- */
+	function rwLog() {
+		if (!window.RW_DEBUG) { return; }
+		var args = Array.prototype.slice.call(arguments);
+		args.unshift('[RW]');
+		console.log.apply(console, args);
+	}
+	/* --- END DIAGNOSTIC --- */
+
 	function isWatchedTableInteractionActive() {
 		var active = document.activeElement;
 		if (!active) { return false; }
 		var $active = $(active);
-		return $active.closest('.rw-watched-registrations-table').length > 0
+		var result = $active.closest('.rw-watched-registrations-table').length > 0
 			&& $active.is('select, input, button');
+		rwLog('isWatchedTableInteractionActive =', result, '| activeElement =', active);
+		return result;
 	}
 
 	function renderWatchedExtensionsTable(registrations) {
+		rwLog('renderWatchedExtensionsTable called | activeElement =', document.activeElement);
 		var $panel = watchedExtensionsPanel();
 		if (!$panel.length) {
 			return;
@@ -590,7 +602,7 @@
 			});
 		});
 
-		$('.registrationwatch').on('change', '.rw-repeat-mode', function () {
+		$('.registrationwatch').off('change.registrationwatchRepeatMode', '.rw-repeat-mode').on('change.registrationwatchRepeatMode', '.rw-repeat-mode', function () {
 			var select = $(this);
 			var row = select.closest('tr');
 			var registrationId = select.data('registration-id') || row.data('registration-id') || '';
@@ -648,6 +660,7 @@
 		});
 
 		function refreshStatus(isAutomatic) {
+			rwLog('refreshStatus start | isAutomatic =', isAutomatic, '| activeElement =', document.activeElement);
 			var token = registrationWatchToken(root);
 			if (!token) {
 				if (!isAutomatic) {
@@ -674,11 +687,14 @@
 					token: token
 				}
 			}).done(function (response) {
+				rwLog('refreshStatus done | isAutomatic =', isAutomatic, '| activeElement =', document.activeElement);
 				if (!response || !response.status) {
 					showMessage(response && response.message ? response.message : 'Unable to refresh registration status.', 'error');
 					return;
 				}
-				if (!isAutomatic || !isWatchedTableInteractionActive()) {
+				var interactionActive = isWatchedTableInteractionActive();
+				rwLog('refreshStatus done | interactionActive =', interactionActive, '| will render =', (!isAutomatic || !interactionActive));
+				if (!isAutomatic || !interactionActive) {
 					renderWatchedExtensionsTable(response.registrations);
 				}
 				renderStatusRows(response.registrations);
@@ -736,6 +752,27 @@
 		startAutoRefresh();
 
 		window.RegistrationWatchRefresh = function () { refreshStatus(true); };
+
+		/* --- DIAGNOSTIC: repeat-mode select interaction trace (requires window.RW_DEBUG = true) --- */
+		$(document).off('mousedown.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode').on('mousedown.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode', function (e) {
+			rwLog('rw-repeat-mode MOUSEDOWN | id =', $(this).data('registration-id'), '| activeElement =', document.activeElement, '| target =', e.target);
+		});
+		$(document).off('mouseup.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode').on('mouseup.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode', function (e) {
+			rwLog('rw-repeat-mode MOUSEUP | id =', $(this).data('registration-id'), '| activeElement =', document.activeElement, '| target =', e.target);
+		});
+		$(document).off('click.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode').on('click.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode', function (e) {
+			rwLog('rw-repeat-mode CLICK | id =', $(this).data('registration-id'), '| activeElement =', document.activeElement, '| target =', e.target);
+		});
+		$(document).off('focus.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode').on('focus.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode', function () {
+			rwLog('rw-repeat-mode FOCUS | id =', $(this).data('registration-id'));
+		});
+		$(document).off('blur.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode').on('blur.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode', function () {
+			rwLog('rw-repeat-mode BLUR | id =', $(this).data('registration-id'), '| activeElement after blur =', document.activeElement);
+		});
+		$(document).off('change.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode').on('change.rwdebug', '.rw-watched-registrations-table .rw-repeat-mode', function () {
+			rwLog('rw-repeat-mode CHANGE | id =', $(this).data('registration-id'), '| val =', $(this).val());
+		});
+		/* --- END DIAGNOSTIC --- */
 
 		$(window).on('unload', function () {
 			stopAutoRefresh();
