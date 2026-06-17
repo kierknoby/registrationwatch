@@ -441,8 +441,8 @@
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
-        position: relative;
-        top: 12px;
+        margin-top: 0;
+        margin-bottom: 0;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-notes-status,
@@ -450,14 +450,6 @@
         display: block;
         min-height: 18px;
         margin-top: 4px;
-        position: relative;
-        top: 10px;
-}
-
-.registrationwatch .rw-watched-registrations-table .rw-registration-notes,
-.registrationwatch .rw-watched-registrations-table .rw-repeat-mode {
-        margin-top: 0;
-        margin-bottom: 0;
 }
 
 @media (max-width: 767px) {
