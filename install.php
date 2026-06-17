@@ -1,29 +1,34 @@
 <?php
 
-// EndPoint Monitor install hook.
+// Registration Watch install hook.
 // TODO: Add AMI ContactStatus ingestion and maintenance windows in a future phase.
 
 global $db;
 
 $sql = [];
 
-$sql[] = "CREATE TABLE IF NOT EXISTS endpointmonitor_endpoints (
+$sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_registrations (
 	id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+	registration_key CHAR(64) NOT NULL,
 	extension VARCHAR(80) NOT NULL,
 	description VARCHAR(255) NULL,
-	notes VARCHAR(48) NOT NULL DEFAULT '',
+	notes VARCHAR(72) NOT NULL DEFAULT '',
 	notes_updated_at DATETIME NULL,
 	enabled TINYINT(1) NOT NULL DEFAULT 1,
+	auto_disabled_absent_at DATETIME NULL,
+	repeat_mode VARCHAR(20) NULL,
 	discovered TINYINT(1) NOT NULL DEFAULT 1,
 	last_known_status VARCHAR(40) NOT NULL DEFAULT 'Unknown',
 	contact_uri TEXT NULL,
 	latency_ms DECIMAL(10,3) NULL,
 	source_ip VARCHAR(45) NULL,
+	registration_ua_class VARCHAR(191) NOT NULL DEFAULT '',
 	transport VARCHAR(20) NULL,
 	user_agent VARCHAR(255) NULL,
 	device_name VARCHAR(255) NULL,
 	firmware_version VARCHAR(80) NULL,
 	source_port INT UNSIGNED NULL,
+	contact_count INT UNSIGNED NOT NULL DEFAULT 1,
 	contact_expires_at DATETIME NULL,
 	qualify_frequency INT UNSIGNED NULL,
 	last_heartbeat_at DATETIME NULL,
@@ -34,17 +39,21 @@ $sql[] = "CREATE TABLE IF NOT EXISTS endpointmonitor_endpoints (
 	created_at DATETIME NULL,
 	updated_at DATETIME NULL,
 	PRIMARY KEY (id),
-	UNIQUE KEY endpointmonitor_endpoints_extension (extension),
-	KEY endpointmonitor_endpoints_enabled (enabled),
-	KEY endpointmonitor_endpoints_status (last_known_status),
-	KEY endpointmonitor_endpoints_last_checked (last_checked_at),
-	KEY endpointmonitor_endpoints_source_ip (source_ip)
+	UNIQUE KEY registrationwatch_registrations_key (registration_key),
+	KEY registrationwatch_registrations_extension (extension),
+	KEY registrationwatch_registrations_enabled (enabled),
+	KEY registrationwatch_registrations_status (last_known_status),
+	KEY registrationwatch_registrations_last_checked (last_checked_at),
+	KEY registrationwatch_registrations_source_ip (source_ip),
+	KEY registrationwatch_registrations_source_identity (extension, source_ip)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 // Phase 4 topology columns are added via the upgrade column-check logic below.
 
-$sql[] = "CREATE TABLE IF NOT EXISTS endpointmonitor_status_history (
+$sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_status_history (
 	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+	registration_id INT UNSIGNED NOT NULL,
+	registration_key CHAR(64) NOT NULL,
 	extension VARCHAR(80) NOT NULL,
 	from_state VARCHAR(40) NULL,
 	to_state VARCHAR(40) NOT NULL,
@@ -54,25 +63,31 @@ $sql[] = "CREATE TABLE IF NOT EXISTS endpointmonitor_status_history (
 	latency_ms DECIMAL(10,3) NULL,
 	created_at DATETIME NOT NULL,
 	PRIMARY KEY (id),
-	KEY endpointmonitor_status_history_extension (extension),
-	KEY endpointmonitor_status_history_created_at (created_at),
-	KEY endpointmonitor_status_history_to_state (to_state),
-	KEY endpointmonitor_status_history_source (source)
+	KEY registrationwatch_status_history_registration_id (registration_id),
+	KEY registrationwatch_status_history_registration_key (registration_key),
+	KEY registrationwatch_status_history_extension (extension),
+	KEY registrationwatch_status_history_created_at (created_at),
+	KEY registrationwatch_status_history_to_state (to_state),
+	KEY registrationwatch_status_history_source (source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-$sql[] = "CREATE TABLE IF NOT EXISTS endpointmonitor_settings (
+$sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_settings (
 	setting_key VARCHAR(80) NOT NULL,
 	setting_value TEXT NULL,
 	updated_at DATETIME NULL,
 	PRIMARY KEY (setting_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-$sql[] = "CREATE TABLE IF NOT EXISTS endpointmonitor_alert_history (
+$sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_history (
 	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+	registration_id INT UNSIGNED NULL,
+	registration_key CHAR(64) NULL,
 	extension VARCHAR(80) NOT NULL,
 	history_id BIGINT UNSIGNED NULL,
+	reminder_n INT UNSIGNED NOT NULL DEFAULT 0,
 	alert_type VARCHAR(40) NOT NULL,
 	status VARCHAR(40) NOT NULL,
+	contact_uri TEXT NULL,
 	recipient VARCHAR(255) NOT NULL,
 	subject VARCHAR(255) NOT NULL,
 	message TEXT NULL,
@@ -80,12 +95,39 @@ $sql[] = "CREATE TABLE IF NOT EXISTS endpointmonitor_alert_history (
 	result VARCHAR(40) NOT NULL,
 	error TEXT NULL,
 	PRIMARY KEY (id),
-	KEY endpointmonitor_alert_history_extension (extension),
-	KEY endpointmonitor_alert_history_history_id (history_id),
-	KEY endpointmonitor_alert_history_alert_type (alert_type),
-	KEY endpointmonitor_alert_history_recipient (recipient),
-	KEY endpointmonitor_alert_history_sent_at (sent_at),
-	KEY endpointmonitor_alert_history_result (result)
+	KEY registrationwatch_alert_history_registration_id (registration_id),
+	KEY registrationwatch_alert_history_registration_key (registration_key),
+	KEY registrationwatch_alert_history_extension (extension),
+	KEY registrationwatch_alert_history_history_id (history_id),
+	KEY registrationwatch_alert_history_reminder_n (reminder_n),
+	KEY registrationwatch_alert_history_alert_type (alert_type),
+	KEY registrationwatch_alert_history_recipient (recipient),
+	KEY registrationwatch_alert_history_sent_at (sent_at),
+	KEY registrationwatch_alert_history_result (result),
+	UNIQUE KEY registrationwatch_alert_unique_transition_recipient (history_id, alert_type, recipient(191), reminder_n)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+$sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_escalation (
+	id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+	registration_id INT UNSIGNED NOT NULL,
+	registration_key CHAR(64) NOT NULL,
+	extension VARCHAR(80) NOT NULL,
+	history_id BIGINT UNSIGNED NOT NULL,
+	alert_type VARCHAR(40) NOT NULL,
+	active_since DATETIME NOT NULL,
+	last_alert_at DATETIME NULL,
+	alert_count INT UNSIGNED NOT NULL DEFAULT 0,
+	next_due_at DATETIME NOT NULL,
+	repeat_mode VARCHAR(20) NOT NULL,
+	created_at DATETIME NULL,
+	updated_at DATETIME NULL,
+	PRIMARY KEY (id),
+	UNIQUE KEY registrationwatch_alert_escalation_registration_type (registration_id, alert_type),
+	KEY registrationwatch_alert_escalation_registration_key (registration_key),
+	KEY registrationwatch_alert_escalation_extension (extension),
+	KEY registrationwatch_alert_escalation_history_id (history_id),
+	KEY registrationwatch_alert_escalation_next_due_at (next_due_at),
+	KEY registrationwatch_alert_escalation_repeat_mode (repeat_mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 foreach ($sql as $statement) {
@@ -95,12 +137,14 @@ foreach ($sql as $statement) {
 $defaultSettings = [
 	'alert_enabled' => '0',
 	'alert_recipients' => '',
+	'repeat_mode' => 'never',
+	'storm_threshold' => '20',
 	'ui_show_limit' => '6',
 	'alert_on_unreachable' => '1',
 	'alert_on_not_registered' => '1',
 	'alert_on_recovery' => '1',
 	'debounce_seconds' => '0',
-	'repeat_suppression_seconds' => '0',
+	'auto_disable_absent_seconds' => '2592000',
 	'trusted_vpn_networks' => '',
 	'topology_poll_interval_seconds' => '10',
 	'status_history_prune_policy' => 'never',
@@ -108,7 +152,7 @@ $defaultSettings = [
 ];
 
 foreach ($defaultSettings as $key => $value) {
-	$stmt = $db->prepare('INSERT IGNORE INTO endpointmonitor_settings (setting_key, setting_value, updated_at) VALUES (:setting_key, :setting_value, :updated_at)');
+	$stmt = $db->prepare('INSERT IGNORE INTO registrationwatch_settings (setting_key, setting_value, updated_at) VALUES (:setting_key, :setting_value, :updated_at)');
 	$stmt->execute([
 		':setting_key' => $key,
 		':setting_value' => $value,
@@ -116,148 +160,14 @@ foreach ($defaultSettings as $key => $value) {
 	]);
 }
 
-$columns = [
-	'notes' => "ALTER TABLE endpointmonitor_endpoints ADD notes VARCHAR(48) NOT NULL DEFAULT '' AFTER description",
-	'notes_updated_at' => "ALTER TABLE endpointmonitor_endpoints ADD notes_updated_at DATETIME NULL AFTER notes",
-	'discovered' => "ALTER TABLE endpointmonitor_endpoints ADD discovered TINYINT(1) NOT NULL DEFAULT 1 AFTER enabled",
-	'last_known_status' => "ALTER TABLE endpointmonitor_endpoints ADD last_known_status VARCHAR(40) NOT NULL DEFAULT 'Unknown' AFTER discovered",
-	'contact_uri' => "ALTER TABLE endpointmonitor_endpoints ADD contact_uri TEXT NULL AFTER last_known_status",
-	'source_ip' => "ALTER TABLE endpointmonitor_endpoints ADD source_ip VARCHAR(45) NULL AFTER contact_uri",
-	'transport' => "ALTER TABLE endpointmonitor_endpoints ADD transport VARCHAR(20) NULL AFTER source_ip",
-	'user_agent' => "ALTER TABLE endpointmonitor_endpoints ADD user_agent VARCHAR(255) NULL AFTER transport",
-	'device_name' => "ALTER TABLE endpointmonitor_endpoints ADD device_name VARCHAR(255) NULL AFTER user_agent",
-	'firmware_version' => "ALTER TABLE endpointmonitor_endpoints ADD firmware_version VARCHAR(80) NULL AFTER device_name",
-	'source_port' => "ALTER TABLE endpointmonitor_endpoints ADD source_port INT UNSIGNED NULL AFTER firmware_version",
-	'contact_expires_at' => "ALTER TABLE endpointmonitor_endpoints ADD contact_expires_at DATETIME NULL AFTER source_port",
-	'qualify_frequency' => "ALTER TABLE endpointmonitor_endpoints ADD qualify_frequency INT UNSIGNED NULL AFTER contact_expires_at",
-	'last_heartbeat_at' => "ALTER TABLE endpointmonitor_endpoints ADD last_heartbeat_at DATETIME NULL AFTER qualify_frequency",
-	'latency_ms' => "ALTER TABLE endpointmonitor_endpoints ADD latency_ms DECIMAL(10,3) NULL AFTER last_heartbeat_at",
-	'last_seen_at' => "ALTER TABLE endpointmonitor_endpoints ADD last_seen_at DATETIME NULL AFTER latency_ms",
-	'last_checked_at' => "ALTER TABLE endpointmonitor_endpoints ADD last_checked_at DATETIME NULL AFTER last_seen_at",
-	'first_discovered_at' => "ALTER TABLE endpointmonitor_endpoints ADD first_discovered_at DATETIME NULL AFTER last_checked_at",
-	'last_discovered_at' => "ALTER TABLE endpointmonitor_endpoints ADD last_discovered_at DATETIME NULL AFTER first_discovered_at",
-];
-
-foreach ($columns as $column => $statement) {
-	$exists = $db->query("SHOW COLUMNS FROM endpointmonitor_endpoints LIKE '" . $column . "'");
-	$hasColumn = false;
-	if ($exists && method_exists($exists, 'fetchColumn')) {
-		$hasColumn = (bool)$exists->fetchColumn();
-	} elseif ($exists && method_exists($exists, 'fetchRow')) {
-		$hasColumn = (bool)$exists->fetchRow();
-	} elseif ($exists && method_exists($exists, 'numRows')) {
-		$hasColumn = $exists->numRows() > 0;
-	} elseif ($exists && method_exists($exists, 'rowCount')) {
-		$hasColumn = $exists->rowCount() > 0;
-	}
-	if ($hasColumn) {
-		continue;
-	}
-	$db->query($statement);
-}
-
-$indexName = 'endpointmonitor_endpoints_source_ip';
-$exists = $db->query("SHOW INDEX FROM endpointmonitor_endpoints WHERE Key_name = '" . $indexName . "'");
-$hasIndex = false;
-
-if ($exists && method_exists($exists, 'fetchColumn')) {
-	$hasIndex = (bool)$exists->fetchColumn();
-} elseif ($exists && method_exists($exists, 'fetchRow')) {
-	$hasIndex = (bool)$exists->fetchRow();
-} elseif ($exists && method_exists($exists, 'numRows')) {
-	$hasIndex = $exists->numRows() > 0;
-} elseif ($exists && method_exists($exists, 'rowCount')) {
-	$hasIndex = $exists->rowCount() > 0;
-}
-
-if (!$hasIndex) {
-	$db->query('ALTER TABLE endpointmonitor_endpoints ADD KEY endpointmonitor_endpoints_source_ip (source_ip)');
-}
-
-$alertColumns = [
-	'history_id' => "ALTER TABLE endpointmonitor_alert_history ADD history_id BIGINT UNSIGNED NULL AFTER extension",
-	'alert_type' => "ALTER TABLE endpointmonitor_alert_history ADD alert_type VARCHAR(40) NOT NULL DEFAULT '' AFTER history_id",
-	'recipient' => "ALTER TABLE endpointmonitor_alert_history ADD recipient VARCHAR(255) NOT NULL DEFAULT '' AFTER status",
-	'subject' => "ALTER TABLE endpointmonitor_alert_history ADD subject VARCHAR(255) NOT NULL DEFAULT '' AFTER recipient",
-	'sent_at' => "ALTER TABLE endpointmonitor_alert_history ADD sent_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:01' AFTER message",
-	'result' => "ALTER TABLE endpointmonitor_alert_history ADD result VARCHAR(40) NOT NULL DEFAULT '' AFTER sent_at",
-	'error' => "ALTER TABLE endpointmonitor_alert_history ADD error TEXT NULL AFTER result",
-];
-
-foreach ($alertColumns as $column => $statement) {
-	$exists = $db->query("SHOW COLUMNS FROM endpointmonitor_alert_history LIKE '" . $column . "'");
-	$hasColumn = false;
-	if ($exists && method_exists($exists, 'fetchColumn')) {
-		$hasColumn = (bool)$exists->fetchColumn();
-	} elseif ($exists && method_exists($exists, 'fetchRow')) {
-		$hasColumn = (bool)$exists->fetchRow();
-	} elseif ($exists && method_exists($exists, 'numRows')) {
-		$hasColumn = $exists->numRows() > 0;
-	} elseif ($exists && method_exists($exists, 'rowCount')) {
-		$hasColumn = $exists->rowCount() > 0;
-	}
-	if ($hasColumn) {
-		continue;
-	}
-	$db->query($statement);
-}
-
-$alertIndexes = [
-	'endpointmonitor_alert_history_history_id' => 'ALTER TABLE endpointmonitor_alert_history ADD KEY endpointmonitor_alert_history_history_id (history_id)',
-	'endpointmonitor_alert_history_alert_type' => 'ALTER TABLE endpointmonitor_alert_history ADD KEY endpointmonitor_alert_history_alert_type (alert_type)',
-	'endpointmonitor_alert_history_recipient' => 'ALTER TABLE endpointmonitor_alert_history ADD KEY endpointmonitor_alert_history_recipient (recipient)',
-	'endpointmonitor_alert_history_sent_at' => 'ALTER TABLE endpointmonitor_alert_history ADD KEY endpointmonitor_alert_history_sent_at (sent_at)',
-	'endpointmonitor_alert_history_result' => 'ALTER TABLE endpointmonitor_alert_history ADD KEY endpointmonitor_alert_history_result (result)',
-];
-
-foreach ($alertIndexes as $index => $statement) {
-	$exists = $db->query("SHOW INDEX FROM endpointmonitor_alert_history WHERE Key_name = '" . $index . "'");
-	$hasIndex = false;
-	if ($exists && method_exists($exists, 'fetchColumn')) {
-		$hasIndex = (bool)$exists->fetchColumn();
-	} elseif ($exists && method_exists($exists, 'fetchRow')) {
-		$hasIndex = (bool)$exists->fetchRow();
-	} elseif ($exists && method_exists($exists, 'numRows')) {
-		$hasIndex = $exists->numRows() > 0;
-	} elseif ($exists && method_exists($exists, 'rowCount')) {
-		$hasIndex = $exists->rowCount() > 0;
-	}
-	if ($hasIndex) {
-		continue;
-	}
-	$db->query($statement);
-}
-
-$uniqueAlertIndexName = 'endpointmonitor_alert_unique_transition_recipient';
-$exists = $db->query("SHOW INDEX FROM endpointmonitor_alert_history WHERE Key_name = '" . $uniqueAlertIndexName . "'");
-$hasIndex = false;
-
-if ($exists && method_exists($exists, 'fetchColumn')) {
-	$hasIndex = (bool)$exists->fetchColumn();
-} elseif ($exists && method_exists($exists, 'fetchRow')) {
-	$hasIndex = (bool)$exists->fetchRow();
-} elseif ($exists && method_exists($exists, 'numRows')) {
-	$hasIndex = $exists->numRows() > 0;
-} elseif ($exists && method_exists($exists, 'rowCount')) {
-	$hasIndex = $exists->rowCount() > 0;
-}
-
-if (!$hasIndex) {
-	$db->query(
-		'ALTER TABLE endpointmonitor_alert_history
-		 ADD UNIQUE KEY endpointmonitor_alert_unique_transition_recipient
-		 (history_id, alert_type, recipient(191))'
-	);
-}
-
-// Register EndPoint Monitor background job.
+// Register Registration Watch background job.
 // FreePBX runs centralized jobs once per minute via fwconsole job --run.
 try {
         if (class_exists('\FreePBX')) {
                 \FreePBX::Job()->addClass(
-                        'endpointmonitor',
+                        'registrationwatch',
                         'monitor',
-                        '\FreePBX\modules\Endpointmonitor\Job',
+                        '\FreePBX\modules\Registrationwatch\Job',
                         '* * * * *',
                         30,
                         true
@@ -265,6 +175,6 @@ try {
         }
 } catch (\Throwable $e) {
         if (class_exists('\FreePBX') && method_exists('\FreePBX', 'Log')) {
-                \FreePBX::Log()->error('endpointmonitor: failed to register background job: ' . $e->getMessage());
+                \FreePBX::Log()->error('registrationwatch: failed to register background job: ' . $e->getMessage());
         }
 }

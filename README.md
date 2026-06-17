@@ -1,324 +1,201 @@
-# EndPoint Monitor for FreePBX 17
+# Registration Watch 1.2.0 for FreePBX 17
 
-## Rename Notice
+Registration Watch (`registrationwatch`) watches SIP/PJSIP registration state in
+FreePBX/PBXact 17. It discovers configured FreePBX PJSIP devices and tracks
+their registration and contact state, recording state changes and sending email
+alerts when watched registrations become unavailable or recover.
 
-EndPoint Monitor (`endpointmonitor`) will be renamed **Registration Watch** (`registrationwatch`) in the next release.
+Multiple registrations under the same extension may be tracked separately where
+Registration Watch can distinguish them from Asterisk/FreePBX contact data.
 
-## Current Release
+Where available, Registration Watch also shows supporting details including
+device IP and port, network IP and port, user-agent and device name, firmware
+version, contact expiry, qualify interval, and latency. These details depend on
+what Asterisk exposes for the registration and may not be available for every
+device or system.
 
-Patch release: 1.1.1, released on 13 June 2026.
+## Release Status
 
-## Version Update
+Registration Watch 1.2.0 is the first release that reflects the settled
+direction of the module. Earlier versions were pilot releases used to prove the
+original idea and alert behaviour.
 
-Patch release from 1.1.0 to 1.1.1 on 13 June 2026 by kierknoby
-
-Fixes stale EndPoint alert backlog replay by only sending alerts for fresh post-debounce transitions and requiring EndPoint alert candidates to still be selected, aligning duplicate alert checks with alert type, updating alert email wording to describe the transition rather than presenting old history as current status, showing Device and Network address details while preserving last-known address details for Not registered alerts where available, tidying history table display labels, cleaning up EndPoint display wording, improving mobile history and EndPoint layouts, refresh history tables with stored endpoint data, corrected EndPoint status colour mapping, and displaying EndPoint card contact expiry as a compact countdown.
-
-Minor release from 1.0.1 to 1.1.0 on 12 June 2026 by kierknoby
-
-Adds configurable Status History and Alert History pruning with Never, Hourly, Daily, Monthly, and Yearly policies, adds confirmed single-row history deletion, makes initial page rendering and EndPoint map auto-refresh read-only, adds module-owned session CSRF protection for AJAX, caps alert timing fields to 0-86400 seconds, improves pruning Apply/Active UI, improves responsive history controls, adds friendlier history labels, corrects EndPoint address display by deriving Device IP and Device Port from the SIP Contact URI, and removes misleading/noisy Asterisk source details from default EndPoint and alert output.
-
-Patch release from 1.0.0 to 1.0.1 on 11 June 2026 by kierknoby
-
-Fixes alert send reservation to prevent duplicate normal alert emails, prevents
-duplicate Test Email click binding, removes duplicate notes autosave handling,
-maps internal source labels to Asterisk, updates FreePBX/PBXact 17-only release
-wording, and includes minor alert email copy cleanup.
+Use the `main` branch for stable releases. Development and release-candidate
+branches may contain incomplete or test-only changes.
 
 ## Compatibility
 
-Use with FreePBX/PBXact 17 only. DO NOT install on FreePBX/PBXact 16 and below.
-
-## Overview
-
-EndPoint Monitor discovers FreePBX PJSIP extensions, lets administrators enable
-or disable monitoring per EndPoint, and shows the latest contact status after
-manual or scheduled reconciliation.
-
-The module provides EndPoint discovery, current status visibility, transition
-history, and email alert attempts from reconciliation-created state changes.
-Scheduled background reconciliation is handled by the FreePBX Job system. The
-module does not install a daemon, systemd unit, AMI event listener, or custom
-probe service.
+Use with FreePBX/PBXact 17 only. Do not install on FreePBX/PBXact 16 or below.
 
 ## Requirements
 
-* FreePBX/PBXact 17 only
+* FreePBX/PBXact 17
 * PJSIP channel driver
-* Asterisk manager command support available to FreePBX
 * Existing FreePBX PJSIP extensions/devices
+* Asterisk Manager access available to FreePBX
 * FreePBX Job runner enabled for scheduled background checks
 * FreePBX mail support configured if alert email delivery is required
 
-## Installation
+## Installing
 
-Pick whichever path fits. The module is currently unsigned and community-supported.
+Registration Watch is a community module and is not currently available through
+the FreePBX online module repository. Install from a local directory or from
+this GitHub repository.
 
-### Option 1: Existing module directory
+**Option 1: Install from an unpacked local module directory**
 
-Place the `endpointmonitor` directory in `/var/www/html/admin/modules/`, then:
+Place the `registrationwatch` directory in `/var/www/html/admin/modules/`, then:
 
 ```sh
-fwconsole ma install endpointmonitor
+fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
 ```
 
-### Option 2: Developer install from GitHub
+**Option 2: Developer install from GitHub**
 
 ```sh
 cd /var/www/html/admin/modules
-git clone https://github.com/kierknoby/endpointmonitor.git endpointmonitor
-fwconsole ma installlocal endpointmonitor
-fwconsole chown
-fwconsole reload
-cd
-```
-
-### Option 3: Developer install from a local copy
-
-From inside the module directory:
-
-```sh
-cd /var/www/html/admin/modules/endpointmonitor
-fwconsole ma installlocal
-fwconsole chown
-fwconsole reload
-cd
-```
-
-Use `installlocal` when installing from an unpacked local module directory.
-
-The module appears under **Admin > EndPoint Monitor**.
-
-## Updating
-
-Do not uninstall the module when updating. Uninstalling removes the module tables.
-
-A normal update keeps the existing EndPoint Monitor database tables, settings, monitored EndPoints, status history, and alert history.
-
-### Check the installed version
-
-```sh
-fwconsole ma list | grep -i endpointmonitor
-```
-
-Expected output includes the installed version and enabled state, for example:
-
-```text
-| endpointmonitor     | 1.1.1      | Enabled | GPLv3+      | Unsigned  |
-```
-
-You can also check the module file directly:
-
-```sh
-grep -n "<version>" /var/www/html/admin/modules/endpointmonitor/module.xml
-```
-
-### Option 1: Existing module directory
-
-Place the updated `endpointmonitor` directory in `/var/www/html/admin/modules/`, then:
-
-```sh
-fwconsole ma install endpointmonitor
+git clone https://github.com/kierknoby/registrationwatch.git registrationwatch
+fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
 ```
 
-### Option 2: Developer update from GitHub
+**Option 3: Developer install from a local copy**
 
-From inside the existing GitHub-installed module directory:
+If you have a local copy of the repository, copy or symlink the
+`registrationwatch` directory into `/var/www/html/admin/modules/`, then:
 
 ```sh
-cd /var/www/html/admin/modules/endpointmonitor
-git config --global --add safe.directory /var/www/html/admin/modules/endpointmonitor
+fwconsole ma installlocal registrationwatch
+fwconsole chown
+fwconsole reload
+```
+
+The module appears under **Reports > Registration Watch**.
+
+## Updating Registration Watch
+
+Do not uninstall when updating. Uninstalling removes Registration Watch tables,
+settings, watched registrations, status history, alert history, and
+repeat-alert state.
+
+Check the installed version before updating:
+
+```sh
+fwconsole ma list | grep -i registrationwatch
+grep "<version>" /var/www/html/admin/modules/registrationwatch/module.xml
+```
+
+**Option 1: Update from an unpacked local module directory**
+
+Replace the contents of `/var/www/html/admin/modules/registrationwatch/` with
+the new release files, then:
+
+```sh
+fwconsole ma installlocal registrationwatch
+fwconsole chown
+fwconsole reload
+```
+
+**Option 2: Developer update from GitHub**
+
+```sh
+git config --global --add safe.directory /var/www/html/admin/modules/registrationwatch
+cd /var/www/html/admin/modules/registrationwatch
 git pull origin main
-fwconsole ma installlocal endpointmonitor
+fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
-cd
 ```
 
-### Option 3: Developer update from a local copy
+**Option 3: Developer update from a local copy**
 
-From inside the updated module directory:
+Replace or re-copy the `registrationwatch` directory into
+`/var/www/html/admin/modules/`, then:
 
 ```sh
-cd /var/www/html/admin/modules/endpointmonitor
-fwconsole ma installlocal
+fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
-cd
 ```
 
-Use `installlocal` when updating from an unpacked local module directory.
-
-After updating, check the installed version again:
+Check the installed version after updating:
 
 ```sh
-fwconsole ma list | grep -i endpointmonitor
+fwconsole ma list | grep -i registrationwatch
+grep "<version>" /var/www/html/admin/modules/registrationwatch/module.xml
 ```
 
-Then open **Admin > EndPoint Monitor** and confirm existing EndPoints, settings, and history are still present.
+Open **Reports > Registration Watch** and confirm that existing watched
+registrations, settings, and history are still present.
 
-## Architecture
+## Background Checks
 
-EndPoint Monitor has four current paths:
-
-1. **Discovery path** reads local FreePBX PJSIP extension/device data and keeps
-   `endpointmonitor_endpoints` aligned with discovered EndPoints.
-2. **Reconciliation path** runs a read-only Asterisk manager command for
-   current PJSIP contact state, updates the latest snapshot, and writes
-   transition rows when state changes.
-3. **Alert path** classifies reconciliation-created transitions, applies
-   debounce and repeat suppression, sends email through FreePBX mail support,
-   and records alert history.
-4. **Admin page path** renders the EndPoint status map, monitored EndPoint
-   toggles, alert settings, status history, and alert history.
-
-Scheduled reconciliation is registered through the FreePBX Job system. FreePBX
-runs its central job runner from cron, so this module does not need its own
-daemon or systemd service.
-
-Future AMI ContactStatus ingestion should write to the same history table rather
-than creating a separate event model.
-
-## Background Monitoring
-
-EndPoint Monitor registers a FreePBX job named:
+Registration Watch registers a FreePBX job named:
 
 ```text
-endpointmonitor :: monitor
+registrationwatch :: monitor
 ```
-
-The job calls the module's background monitor method and runs reconciliation
-server-side, even when the admin page is not open.
-
-The background job currently:
-
-* Reads alert and polling settings.
-* Skips cleanly if polling is disabled.
-* Runs reconciliation when polling is enabled, even if alerts are disabled.
-* Records state transitions.
-* Processes eligible alert decisions.
-* Writes status output to the FreePBX job runner.
-
-The default FreePBX job cadence is once per minute. The admin page may still
-refresh visually more frequently while open, but true background monitoring is
-handled by the FreePBX Job system.
 
 Useful checks:
 
 ```sh
-fwconsole job --list | grep -i endpointmonitor
+fwconsole job --list | grep -i registrationwatch
 fwconsole job --run=<job_id> --force
 ```
 
-## Security Model
+Expected job output includes:
 
-* AJAX commands use a fixed command allowlist.
-* Current AJAX commands are `refresh`, `setenabled`, `savenotes`,
-  `saveshowlimit`, `savealerts`, `savetopology`, `testemail`, `gettopology`,
-  `saveprunepolicy`, `deletestatushistoryrow`, and `deletealerthistoryrow`.
-* AJAX handlers require a module-owned session CSRF token.
-* SQL writes and history deletes use prepared statements.
-* Asterisk access is read-only in this phase.
-* No shell execution is used by the module.
-* Email is sent only through FreePBX mail support.
-* Alerts are not sent merely from page load.
+```text
+Running registrationwatch :: monitor ...
+Registration Watch background job completed.
+```
 
-## Hardening Notes
+The module does not install a daemon, systemd unit, AMI event listener, custom
+probe service, webhook sender, or SMS sender.
 
-Access control currently relies on FreePBX authenticated admin context plus CSRF
-token validation. Granular ACL support is a future enhancement.
+## Data Model
 
-**TODO:** Implement FreePBX module-level ACL integration:
+The canonical Registration Watch table names are:
 
-* Add ACL checks via `\FreePBX\Acl` when available.
-* Define granular permissions, such as `endpointmonitor/manage` and
-  `endpointmonitor/view`.
-* Restrict AJAX handlers based on permissions rather than presence checks.
+* `registrationwatch_registrations`
+* `registrationwatch_status_history`
+* `registrationwatch_settings`
+* `registrationwatch_alert_history`
+* `registrationwatch_alert_escalation`
 
-Logging improvements:
+`registrationwatch_registrations` stores watched registration entries,
+including discovered contact details, watch toggles, admin notes, and the latest
+status snapshot.
 
-* Reconciliation and email send failures are logged to FreePBX system logs.
-* Parser diagnostics log once per refresh cycle with failure count and sample
-  line.
-* Stack traces are never exposed in the UI; users see generic error messages.
+`registrationwatch_status_history` stores transition rows created during
+reconciliation.
 
-Backup/restore:
+`registrationwatch_settings` stores simple key/value settings, including polling
+interval, show limits, alert configuration, repeat-alert configuration, storm
+threshold, history pruning policies, global monitoring snooze state, and
+remembered UI preferences such as the Cards/Rows view choice, sort columns, and
+sort directions.
 
-* Settings and EndPoint monitoring configuration are backed up and restored via
-  upsert logic.
-* Status and alert history are currently **not** backed up to avoid duplicating
-  operational records during restore.
-* Status and alert history are volatile audit-trail records and should not be
-  carried forward on restore by default.
-* History export can be added later if needed.
+`registrationwatch_alert_history` stores one row per recipient and alert
+decision. The unique key `registrationwatch_alert_unique_transition_recipient`
+prevents repeated handling of the same transition, alert type, and recipient.
+Storm-suppressed rows are also stored here so the audit trail shows which
+individual messages were not sent because a Storm Summary was used.
 
-Admin UI:
+`registrationwatch_alert_escalation` stores repeat-alert reminder state for
+registrations that remain unavailable, tracking when the next reminder is due
+under the configured repeat mode.
 
-* Monitored EndPoints can have short admin notes of up to 48 characters, saved inline with a timestamp.
-* Show selection is saved as a module setting and applies to the map and history tables.
-* History pruning policies default to Never. Hourly, Daily, Monthly, and Yearly
-  pruning, plus single-row history deletion, permanently delete matching history
-  rows after explicit administrator confirmation.
-* EndPoint Status Map shows a limited tile view by default, with Show options for
-  6, 30, 60, 120, and All.
-* EndPoint detail displays device IP, device port, network IP, network port,
-  device, version, contact expiry, qualify frequency, and latency where available.
-* Temporary action messages appear as fading overlay messages so they remain visible on long pages.
-* Warning banners appear where alert configuration cannot support delivery.
+## Alerting
 
-## Discovery Model
+Alerts are generated from reconciliation-created transition rows.
 
-Discovery is PJSIP-extension focused.
-
-* Primary source: FreePBX `devices` rows with `tech = 'pjsip'`.
-* Fallback source: FreePBX `users` rows with matching PJSIP EndPoint objects.
-* A matching PJSIP EndPoint object is required.
-* Trunk-only PJSIP objects are intentionally excluded.
-* Virtual/non-PJSIP extensions are intentionally excluded.
-
-## Status Model
-
-Current status is a snapshot of the most recent reconciliation.
-
-Current states:
-
-* Reachable
-* Unreachable
-* Registered (no qualify)
-* Not registered
-* Unknown
-
-`Registered (no qualify)` means Asterisk has a contact but qualify/RTT data is
-not available. The UI shows RTT as unavailable rather than treating the EndPoint
-as unknown.
-
-`Removed` is not used as a current state. When an EndPoint previously had a
-contact or registered/reachable state and reconciliation finds no contact, the
-current state becomes `Not registered` and the transition reason is shown as
-Contact removed.
-
-## Status History
-
-Status History is transition-based. It stores state changes, not every refresh.
-The admin page shows the most recent transitions.
-
-Reconciliation writes history rows with:
-
-* `source = Asterisk`
-* Contact removed when a previously contacted/registered EndPoint becomes
-  `Not registered`
-* Status changed for other state changes
-
-Until AMI ContactStatus ingestion exists, short flaps can still be missed
-between reconciliation runs.
-
-## Email Alerting
-
-Alerts are generated from transition rows created by reconciliation.
+Discovered registrations for configured PJSIP devices are listed in the Watched
+Extensions table but not monitored by default. Enable the Monitored toggle for
+any registration that should generate alerts.
 
 Defaults:
 
@@ -328,7 +205,9 @@ Defaults:
 * Alert on not registered enabled
 * Alert on recovery enabled
 * Debounce seconds: `0`, maximum `86400`
-* Repeat suppression seconds: `0`, maximum `86400`
+* Repeat alerts: `Never`
+* Storm Threshold: `20`
+* Auto-disable absent registrations: `2592000` seconds, 30 days
 
 Alertable transitions:
 
@@ -337,122 +216,81 @@ Alertable transitions:
 * Unreachable or Not registered to Reachable
 * Unreachable or Not registered to Registered (no qualify)
 
-EndPoint alert candidates are limited to fresh post-debounce transitions so old
-status-history rows are not replayed later after recipient or settings changes.
+First baseline transitions from Unknown are suppressed. Old status-history rows
+are not replayed later after recipient or settings changes.
 
-First baseline transitions from Unknown are suppressed. If an EndPoint recovers
-to Registered (no qualify), the email notes that qualify is disabled and RTT is
-unavailable.
+Repeat alert modes can send reminders while an alertable registration state
+continues. A recovery transition resets the reminder clock.
 
-Alert emails include a reminder that email delivery can be delayed and that
-current status should be checked in the FreePBX module.
+Repeat alert modes:
 
-EndPoint alert emails show both Device and Network address details where
-available. When the SIP Contact URI includes the original host, Device IP and
-Device Port are derived from that EndPoint-advertised address. Network IP and
-Network Port are derived from the SIP Contact URI address used for the
-registration path, falling back to registrar metadata where available.
+* Never: send only the initial state-change alert.
+* Every 5 minutes: repeat every 5 minutes while the registration remains unavailable.
+* Hourly: repeat once per hour while unavailable.
+* Daily: repeat once per day while unavailable.
+* Escalating: uses a Fibonacci-style backoff schedule, starting with shorter reminders and gradually increasing the interval up to daily. The wait between reminders follows Fibonacci multipliers on a 5-minute base:
+  * 5 min, 5 min, 10 min, 15 min, 25 min, 40 min, 65 min, 105 min, …
+  * Capped at 24 hours once the interval reaches the daily ceiling.
 
-For Not registered / Contact removed alerts, the module uses historical labels,
-such as Last Device IP, Last Device Port, Last Network IP, and Last Network
-Port, because the EndPoint is no longer currently registered. Unknown is shown
-only when no useful current or historical address is available.
+Stored legacy `fibonacci` repeat-mode values are treated as Escalating.
 
-Alert decisions are recorded per transition, alert type, and recipient. The
-module prevents repeated handling of the same transition, alert type, and
-recipient once an alert-history row exists.
-This avoids repeated sends when manual refresh and scheduled reconciliation
-touch the same transition.
+The default debounce delay is 0 seconds, so first alerts are sent immediately
+when an alertable problem is detected. Increase this value to reduce noise from
+short reloads, restarts, and transient network events.
 
-The alert-history insert uses duplicate-tolerant database insertion so a race
-between two workers does not create duplicate rows or fail noisily.
+Storm Threshold limits large batches of alerts generated in the same processing
+pass. It reduces email floods from sudden widespread registration changes, but
+it is not full correlated-outage detection. The count is per registration. Use
+0 to disable.
 
-FreePBX mailer compatibility must be tested on a real FreePBX 17 system. The
-module intentionally does not use raw PHP `mail()` fallback.
+Watched registrations that have been continuously absent for 30 days are
+auto-disabled to stop stale entries from alerting indefinitely. They remain
+visible in the Watched Extensions table. If the same registration returns, it is
+re-enabled automatically.
 
-Email sending uses FreePBX/CodeIgniter mail support. The module attempts to use
-the configured FreePBX notification sender. If no usable sender is available,
-the alert attempt should fail safely and record the error rather than guessing a
-sender domain.
-The FreePBX Advanced Settings Email "From:" Address should be configured before
-using alert emails or Test Email.
+Email sending uses FreePBX/CodeIgniter mail support. Registration Watch does not
+use raw PHP `mail()` fallback. A successful local mailer handoff means the
+message was accepted by the PBX mailer, not that final external delivery is
+guaranteed.
 
-A successful local mailer handoff means the message was accepted by the local
-mailer. It does not guarantee external delivery. Final delivery still depends on
-the PBX mail configuration, relay rules, SPF/DKIM alignment, and the recipient
-mail system.
+## Snooze Monitoring
 
-## Database Tables
+Snooze Monitoring is a global pause control in the top monitoring banner. While
+active, Registration Watch continues to record registration state changes but
+does not send alert emails.
 
-`endpointmonitor_endpoints` stores discovered EndPoints, monitoring toggles, and
-the latest status snapshot.
+* The snooze is global and applies to all watched registrations.
+* Monitoring can be resumed manually before the snooze period ends.
+* Watched registrations, settings, and history are not affected by snoozing.
+* There is no per-registration snooze.
 
-`endpointmonitor_status_history` stores transition rows:
+## User Interface
 
-```sql
-id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY
-extension VARCHAR(80) NOT NULL
-from_state VARCHAR(40) NULL
-to_state VARCHAR(40) NOT NULL
-source VARCHAR(40) NOT NULL
-reason VARCHAR(80) NULL
-contact_uri TEXT NULL
-latency_ms DECIMAL(10,3) NULL
-created_at DATETIME NOT NULL
-```
+The Registration Watch admin page is available under **Reports > Registration Watch**
+and contains the following sections:
 
-Indexes:
+* **Monitoring banner** -- shows the current monitoring state (active, inactive, or snoozed) with Snooze/Resume controls.
+* **Registration Status Map** -- shows all discovered registrations. Supports Cards and Rows views. The Row view has sortable columns.
+* **Alert Settings** -- configures recipients, alert triggers, debounce, repeat alerts, storm threshold, and topology polling.
+* **Watched Extensions** -- lists watched registrations with per-registration monitoring toggles, repeat-alert overrides, and admin notes. Columns are sortable.
+* **Status History** -- records registration state transitions. Columns are sortable.
+* **Alert History** -- records sent and suppressed alert attempts. Columns are sortable.
 
-* `extension`
-* `created_at`
-* `to_state`
-* `source`
+Cards/Rows view choice, sort columns, sort directions, and Show limit are
+persisted using module settings rather than browser-only local storage, so they
+are remembered across browsers for the same PBX.
 
-`endpointmonitor_settings` stores simple key/value settings, including alert
-configuration, UI Show limits, and history prune policies. The history prune
-settings are `status_history_prune_policy` and `alert_history_prune_policy`,
-both default to `never`, and valid policies are `hourly`, `daily`, `monthly`,
-`yearly`, and `never`.
+## Security Model
 
-`endpointmonitor_alert_history` stores one row per recipient and alert decision:
+* AJAX commands use a fixed command allowlist.
+* AJAX handlers require a module-owned session CSRF token.
+* Persisted UI settings are restricted to known setting keys and allowed values.
+* SQL writes and history deletes use prepared statements.
+* Asterisk access is read-only in this phase.
+* No shell execution is used by the module.
+* Alerts are not sent merely from page load.
 
-```sql
-id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY
-extension VARCHAR(80) NOT NULL
-history_id BIGINT UNSIGNED NULL
-alert_type VARCHAR(40) NOT NULL
-status VARCHAR(40) NOT NULL
-recipient VARCHAR(255) NOT NULL
-subject VARCHAR(255) NOT NULL
-message TEXT NULL
-sent_at DATETIME NOT NULL
-result VARCHAR(40) NOT NULL
-error TEXT NULL
-```
-
-Duplicate guard:
-
-```sql
-UNIQUE KEY endpointmonitor_alert_unique_transition_recipient
-(history_id, alert_type, recipient(191))
-```
-
-Indexes:
-
-* `extension`
-* `history_id`
-* `alert_type`
-* `recipient`
-* `sent_at`
-* `result`
-
-## Contact Refresh Notes
-
-The current implementation parses `pjsip show contacts` through Asterisk manager
-command support. That CLI parsing is a short-term implementation detail. Future
-releases should move toward structured AMI/PJSIP data where practical. Parsing
-human-readable CLI output should be treated as technical debt rather than a
-permanent architecture decision.
+Granular FreePBX ACL integration is still future work.
 
 ## Current Limitations
 
@@ -462,83 +300,54 @@ permanent architecture decision.
 * No maintenance windows yet.
 * No webhook or SMS alert delivery yet.
 * Short flaps can be missed between reconciliation runs.
-* Email delivery depends on the PBX's configured mail sender and relay setup.
+* Email delivery depends on the PBX mail sender and relay setup.
+* Snooze Monitoring is global, not per-registration.
+* Registration Watch only watches registrations for configured FreePBX PJSIP
+  devices (extensions). PJSIP trunks and other non-device PJSIP objects are not
+  watched. A live contact is matched to a device by its endpoint identity
+  against the FreePBX devices table, so custom or unusual PJSIP objects whose
+  contact target does not match a configured device ID will not appear.
+* Registration Watch identifies watched entries from the FreePBX extension
+  identity and registration/contact details exposed by Asterisk. Multiple
+  contacts for the same extension may appear as separate watched entries where
+  Registration Watch can distinguish them. Device IP, network IP, user-agent,
+  firmware, contact expiry, and latency details may not be available for every
+  device or system.
 
-## Future Design Notes
+## Validation
 
-* Keep MVP PJSIP only.
-* Continue monitoring selected EndPoints/extensions.
-* Add AMI ContactStatus ingestion when the snapshot/history/alert behaviour is
-  stable.
-* Add maintenance windows.
-* Add optional webhooks/SMS later.
-* Consider history export controls.
-* Consider structured data sources to reduce CLI parser dependency.
-
-## AI Disclosure
-
-This module has been developed with AI assistance for code generation, review,
-testing, and documentation. Changes should still be reviewed, tested, and
-accepted by a human maintainer before deployment.
-
-## Tests
-
-Useful checks:
+Useful local checks:
 
 ```sh
-php -l Endpointmonitor.class.php
+php -l Registrationwatch.class.php
 php -l Job.php
-php -l page.endpointmonitor.php
+php -l page.registrationwatch.php
 php -l install.php
 php -l uninstall.php
 php -l views/main.php
-php -d xdebug.mode=off -r '$xml = simplexml_load_file("module.xml"); echo $xml ? "module.xml parsed\n" : "module.xml failed\n";'
-fwconsole job --list | grep -i endpointmonitor
+php -r '$xml = simplexml_load_file("module.xml"); echo $xml ? "module.xml parsed\n" : "module.xml failed\n";'
+php tests/repeat_alerting_contract.php
 ```
 
 On a real FreePBX/PBXact 17 system:
 
 ```sh
 fwconsole reload
-fwconsole job --list | grep -i endpointmonitor
+fwconsole job --list | grep -i registrationwatch
 fwconsole job --run=<job_id> --force
 ```
 
-Expected job output:
+## Uninstalling
 
-```text
-Running endpointmonitor :: monitor ...
-EndPoint Monitor background job completed.
-Done with monitor
-```
-
-## Uninstalling EndPoint Monitor
+Uninstalling Registration Watch removes the module job and drops
+`registrationwatch_*` tables. Back up first if you need Registration Watch data.
 
 ```sh
-cd /var/www/html/admin/modules
-
-fwconsole ma uninstall endpointmonitor --force
-rm -rf /var/www/html/admin/modules/endpointmonitor
-
+fwconsole ma uninstall registrationwatch --force
+rm -rf /var/www/html/admin/modules/registrationwatch
 fwconsole chown
 fwconsole reload
-
-cd
 ```
-
-Verify it has gone:
-
-```sh
-fwconsole ma list | grep -i endpointmonitor || echo "endpointmonitor removed"
-ls -ld /var/www/html/admin/modules/endpointmonitor 2>/dev/null || echo "endpointmonitor directory removed"
-```
-
-## Notes
-
-EndPoint Monitor currently uses reconciliation as the source of truth for status
-history and alerting. Do not add custom probes or a separate event model until
-the existing snapshot/history/alert behaviour has been reviewed on a real
-FreePBX 17 system.
 
 ## Licence
 
@@ -547,3 +356,226 @@ GPLv3+. See LICENSE.
 ## Author
 
 @kierknoby, Kieran Knowles-Byrne // FreePBX UK
+
+## Release History
+
+### 1.2.0, minor release, 17 June 2026
+
+Released by `@kierknoby, Kieran Knowles-Byrne // FreePBX UK`.
+
+This minor release renames EndPoint Monitor to Registration Watch, moves the module to a per-registration model, adds repeat alerting, improves alert tuning, adds Snooze Monitoring, and significantly improves the Registration Watch admin UI.
+
+#### Module rename
+
+* Renames EndPoint Monitor to Registration Watch.
+* Renames module internals to use registration-based domain language.
+* Changes the module path, page, assets, selectors, and runtime references to `registrationwatch`.
+* Adds `registrationwatch_registrations` as the canonical registrations table.
+* Preserves literal PJSIP/Asterisk endpoint terminology only where required by the platform.
+
+#### Registration model
+
+* Moves from one row per extension to a per-registration model.
+* Tracks watched registrations using registration/contact identity rather than extension number alone.
+* Supports multiple registrations under the same extension.
+* Groups watched registrations by extension in the Watched Extensions table.
+* Reduces duplicate rows and re-registration flapping by using registration/contact details.
+* Keys watched registrations after registrar enrichment, so authoritative `via_addr` and exact-contact user-agent data contribute to registration identity.
+* Adds per-registration history, alert, and repeat-alert state.
+* Adds reconciliation locking to reduce duplicate transition handling.
+* Restricts watched registrations to configured FreePBX PJSIP devices.
+* Ignores trunk contacts and other non-device PJSIP objects.
+* Adds visible Not registered placeholder rows for configured PJSIP devices with no live contact.
+* Inserts newly discovered no-contact placeholders as discovered but unmonitored, so newly listed extensions do not generate alerts by default.
+* Promotes no-contact placeholders when a matching live contact appears.
+* Demotes stale live contacts back to placeholder state when the live contact disappears, preserving the configured device row.
+
+#### Repeat alerts
+
+* Adds opt-in repeat alerting for registrations that remain in an alertable problem state.
+* Adds repeat alert modes for Never, Every 5 minutes, Hourly, Daily, and Escalating.
+* Adds per-registration repeat alert overrides in the Watched Extensions table.
+* Adds escalation state so reminders are state-driven rather than purely transition-driven.
+* Uses Fibonacci-style intervals for Escalating reminders.
+* Updates Escalating repeat timing to use 5-minute-base intervals.
+* Clarifies repeat alert email wording so repeat reminders are clearly distinguished from initial state-change alerts.
+* Treats stored legacy `fibonacci` repeat-mode values as Escalating.
+
+#### Alert tuning and flood control
+
+* Adds alert tuning controls for repeat alert scheduling, debounce behaviour, and storm protection.
+* Changes the default debounce delay to immediate alerting for new installs.
+* Caps alert timing values safely.
+* Adds storm threshold/flood-control behaviour.
+* Moves Alert Settings above Watched Extensions.
+* Moves Alert Settings actions into the left column beneath alert toggles.
+* Relocates Storm Threshold and diagnostics into the alerting decision area.
+* Improves alert settings layout, spacing, and help text.
+* Changes Recipients from a single-line input to a three-row textarea.
+* Prevents duplicate alert settings save handlers.
+* Prevents repeated Repeat alerts handler binding.
+* Guards frontend script initialisation against duplicate loading.
+* Adds live module/database time diagnostics to help confirm current server-side timing during refresh and alert testing.
+* Moves diagnostics into a quiet page footer while preserving live AJAX updates.
+* Replaces stale Manual Refresh empty-state wording with clearer refresh/status messaging.
+* Aligns Storm Summary email wording with Alert Settings help text and fixes singular/plural suppression wording.
+
+#### Snooze Monitoring
+
+* Adds a global Snooze Monitoring control in the top monitoring banner.
+* Shows active, inactive, and snoozed monitoring states.
+* Adds quick pause buttons and a countdown while monitoring is snoozed.
+* Allows monitoring to be resumed before the snooze period ends.
+* Stores global snooze state in module settings.
+* Removes the earlier experimental row-level Snooze implementation in favour of the global control.
+
+#### Watched Extensions improvements
+
+* Renames the admin list to Watched Extensions.
+* Replaces the plain Monitored checkbox presentation with a clearer on/off toggle.
+* Adds Monitored column sorting to the Watched Extensions table.
+* Adds an active-alert disable control for watched registrations in an active problem state.
+* Shows active-alert watched rows with clearer red warning styling.
+* Adds compact active-alert labelling and Disable alerting action text.
+* Adds 72-character Watched Extensions notes.
+* Fixes notes autosave length handling so frontend, backend, and schema limits match.
+* Fixes notes rendering after AJAX refresh.
+* Fixes saved notes disappearing after sorting by updating the in-memory watched-registration cache after a successful notes save.
+* Fixes Repeat alerts dropdown reliability in the Watched Extensions table.
+* Clears active-alert row styling immediately after Disable Alerting succeeds.
+* Prevents duplicate Repeat alerts handler binding.
+* Prevents automatic refresh from interrupting Watched Extensions controls while they are being used.
+* Keeps watched-row controls usable during automatic topology refreshes.
+* Improves Watched Extensions table spacing, alignment, row separation, and saved-status text positioning.
+* Improves saved-status alignment for Repeat alerts and Notes.
+
+#### Registration Status Map
+
+* Adds Cards and Rows views for the Registration Status Map.
+* Adds registration detail columns to Registration Status Map row view.
+* Adds sortable Registration Status Map row columns.
+* Restores the flat card layout with cards shown side by side.
+* Improves map card wording and removes unnecessary source/contact clutter.
+* Normalises SIP URI parameters before contact matching, so registrar enrichment still works when Asterisk adds `;x-ast-*` metadata.
+* Keeps empty card values clean instead of showing misleading placeholders.
+
+#### Remembered UI preferences and sorting
+
+* Remembers Registration Status Map Cards/Rows view.
+* Remembers Registration Status Map row sorting.
+* Adds sortable Watched Extensions columns.
+* Adds sortable Status History columns.
+* Adds sortable Alert History columns.
+* Persists selected sort columns and sort directions using module settings.
+* Stores remembered UI state in `registrationwatch_settings`, not browser-only local storage.
+* Hardens persisted UI setting validation so only known view modes, sort directions, and table sort keys can be saved.
+
+#### History and table display
+
+* Makes Status History row colouring reflect the resulting state.
+* Makes Alert History row colouring state-based.
+* Applies table state colours directly to cells to work reliably under the FreePBX admin theme.
+* Makes Watched Extensions row highlighting reflect monitored state.
+* Improves active-alert row presentation.
+* Tidies Alert Settings repeat-alert help text spacing.
+* Moves module/database time diagnostics into a quiet page footer while preserving live AJAX updates.
+
+#### Discovery and refresh behaviour
+
+* Updates the AJAX refresh path so Watched Extensions auto-populates after discovery.
+* Adds notes fields to the `gettopology` registration payload.
+* Adds stale-guarded reconciliation to topology polling, so browser polling only triggers live reconciliation when stored state is older than the configured poll interval.
+* Keeps automatic topology polling from rebuilding the Watched Extensions table while controls are focused or being used.
+
+#### Documentation
+
+* Documents the PJSIP device allowlist.
+* Clarifies that Registration Watch tracks configured FreePBX PJSIP devices only.
+* Clarifies that trunks and other non-device PJSIP objects are ignored.
+* Documents repeat alert modes and the escalation table.
+* Clarifies that discovered registrations are not monitored by default.
+* Aligns README wording with Watched Extensions and registration-based terminology.
+
+### 1.1.1, patch release, 13 June 2026
+
+Released by `@kierknoby, Kieran Knowles-Byrne // FreePBX UK`.
+
+This patch release focuses on alert correctness, clearer endpoint status reporting, improved address visibility, and UI polish.
+
+#### Alert fixes
+
+* Prevents stale EndPoint alert backlog replay by only sending alerts for fresh post-debounce transitions.
+* Requires EndPoint alert candidates to still be selected before an alert is sent.
+* Aligns duplicate alert checks with the alert type, so different alert types are handled correctly.
+* Updates alert email wording so it describes the actual transition rather than presenting old history as current status.
+* Preserves last-known address details for Not registered alerts where available.
+
+#### Endpoint address and status improvements
+
+* Shows Device and Network address details in EndPoint alerts and displays.
+* Refreshes history tables using stored endpoint data.
+* Corrects EndPoint status colour mapping.
+* Displays EndPoint card contact expiry as a compact countdown.
+* Cleans up EndPoint display wording.
+
+#### UI and layout improvements
+
+* Tidies history table display labels.
+* Improves mobile history table layout.
+* Improves mobile EndPoint layout.
+* Applies more consistent sentence-case display labels across EndPoint status and history output.
+
+### 1.1.0, minor release, 12 June 2026
+
+Released by `@kierknoby, Kieran Knowles-Byrne // FreePBX UK`.
+
+This minor release adds safe history pruning, improves AJAX/session protection, reduces unnecessary write behaviour during page rendering, and improves endpoint address handling.
+
+#### New features
+
+* Adds configurable Status History pruning.
+* Adds configurable Alert History pruning.
+* Supports Never, Hourly, Daily, Monthly, and Yearly pruning policies.
+* Adds confirmed single-row history deletion.
+* Adds module-owned session CSRF protection for AJAX requests.
+
+#### Safety and data handling
+
+* Makes initial page rendering read-only.
+* Makes EndPoint map auto-refresh read-only.
+* Keeps discovery/reconciliation out of passive page loads.
+* Caps alert timing fields to 0-86400 seconds.
+* Improves input handling around pruning and alert timing controls.
+
+#### UI improvements
+
+* Improves pruning Apply/Active UI.
+* Improves responsive history controls.
+* Adds friendlier history reason labels.
+* Tidies alert email delivery guidance.
+
+#### Endpoint display improvements
+
+* Corrects EndPoint address display by deriving Device IP and Device Port from the SIP Contact URI.
+* Shows Device IP separately from Asterisk source data.
+* Removes misleading or noisy Asterisk source details from default EndPoint and alert output.
+
+### 1.0.1, patch release, 11 June 2026
+
+Released by `@kierknoby, Kieran Knowles-Byrne // FreePBX UK`.
+
+This patch release fixes duplicate alert and duplicate UI handling issues found after the initial release, with minor wording and documentation cleanup.
+
+#### Alert fixes
+
+* Fixes alert send reservation to prevent duplicate normal alert emails.
+* Prevents duplicate Test Email click binding.
+* Removes duplicate notes autosave handling.
+
+#### Display and wording improvements
+
+* Maps internal source labels to Asterisk.
+* Updates FreePBX/PBXact 17-only release wording.
+* Cleans up minor alert email copy.
+* Adds clearer 1.0.1 release headings to the README.
+* Documents EndPoint Monitor update paths.
