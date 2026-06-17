@@ -229,7 +229,11 @@
 			monitoredCell = buildMonitoredCellHtml(parseInt(registration.enabled, 10));
 		}
 
-		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '"' + (parseInt(registration.enabled, 10) ? ' class="rw-row-enabled"' : '') + '>' +
+		var rowCls = '';
+		if (parseInt(registration.enabled, 10)) {
+			rowCls = ' class="' + (isActivelyAlerting(registration) ? 'rw-row-fault' : 'rw-row-enabled') + '"';
+		}
+		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '"' + rowCls + '>' +
 			'<td data-label="Monitored">' + monitoredCell + '</td>' +
 			'<td data-label="Extension">' + escapeHtml(registration.extension) + '</td>' +
 			'<td data-label="Description">' + escapeHtml(registration.description || '-') + '</td>' +
