@@ -296,6 +296,10 @@ $_rwAssetVer = max(
 							<span id="rw-map-count" class="text-muted" style="margin-left: 10px;">
 								<?php echo sprintf(_('Showing %d of %d EndPoints'), $mapVisibleCount, $mapRegistrationTotal); ?>
 							</span>
+							<div class="btn-group btn-group-xs" id="rw-map-view-toggle" style="margin-left: 16px;" role="group" aria-label="<?php echo _('Map view'); ?>">
+								<button type="button" class="btn btn-default" id="rw-map-view-card" title="<?php echo _('Card view'); ?>"><i class="fa fa-th-large"></i> <?php echo _('Cards'); ?></button>
+								<button type="button" class="btn btn-default" id="rw-map-view-row" title="<?php echo _('Row view'); ?>"><i class="fa fa-list"></i> <?php echo _('Rows'); ?></button>
+							</div>
 						</div>
 					<div id="rw-topology-container" style="min-height: 200px;">
 						<?php if (empty($mapRegistrations)): ?>
@@ -682,7 +686,12 @@ $_rwAssetVer = max(
 		const textUnknown = <?php echo json_encode(_('Unknown')); ?>;
 		const textEmpty = '-';
 		const textExpired = <?php echo json_encode(_('Expired')); ?>;
+		const textExtension = <?php echo json_encode(_('Extension')); ?>;
+		const textStatus = <?php echo json_encode(_('Status')); ?>;
+		const textDescription = <?php echo json_encode(_('Description')); ?>;
+		const textSourceIp = <?php echo json_encode(_('Source IP')); ?>;
 		let latestMapRegistrations = <?php echo json_encode($mapRegistrations); ?>;
+		let statusMapViewMode = localStorage.getItem('rw-map-view-mode') || 'card';
 		const rwInitialMonitoringState = <?php echo json_encode($monitoringState); ?>;
 		if (window.RegistrationWatchUpdateMonitoringBanner) {
 			window.RegistrationWatchUpdateMonitoringBanner(rwInitialMonitoringState);
@@ -814,6 +823,19 @@ $_rwAssetVer = max(
 			count.textContent = 'Showing ' + shown + ' of ' + total + ' EndPoints';
 		}
 
+		function applyViewToggleState() {
+			const btnCard = document.getElementById('rw-map-view-card');
+			const btnRow = document.getElementById('rw-map-view-row');
+			if (!btnCard || !btnRow) { return; }
+			if (statusMapViewMode === 'row') {
+				btnCard.classList.remove('active');
+				btnRow.classList.add('active');
+			} else {
+				btnCard.classList.add('active');
+				btnRow.classList.remove('active');
+			}
+		}
+
 		function renderRegistrationMap(registrations) {
 			const container = document.getElementById('rw-topology-container');
 			if (!container) return;
@@ -832,21 +854,48 @@ $_rwAssetVer = max(
 				return;
 			}
 
-			let html = '<div class="rw-registration-map">';
-			for (const registration of visible) {
-				const status = registration.status || registration.last_known_status || 'Unknown';
-				html += '<div class="rw-map-tile">';
-				html += '<div class="rw-map-title"><span class="rw-led ' + statusClass(status) + '"></span><span>' + escapeHtml(registration.extension || textUnknown) + '</span></div>';
-				html += '<div class="rw-map-description">' + escapeHtml(registration.description || '-') + '</div>';
-				html += '<div class="rw-map-status">' + escapeHtml(displayLabel(status)) + '</div>';
-				for (const row of mapDetailRows(registration, status)) {
-					html += '<div class="rw-map-detail">' + escapeHtml(row[0]) + ': ' + escapeHtml(row[1]) + '</div>';
+			if (statusMapViewMode === 'row') {
+				let html = '<table class="table table-condensed rw-map-row-view">';
+				html += '<thead><tr>';
+				html += '<th>' + escapeHtml(textExtension) + '</th>';
+				html += '<th>' + escapeHtml(textStatus) + '</th>';
+				html += '<th>' + escapeHtml(textDescription) + '</th>';
+				html += '<th>' + escapeHtml(textSourceIp) + '</th>';
+				html += '<th>' + escapeHtml(textLatency) + '</th>';
+				html += '<th>' + escapeHtml(textContactExpires) + '</th>';
+				html += '</tr></thead><tbody>';
+				for (const registration of visible) {
+					const status = registration.status || registration.last_known_status || 'Unknown';
+					const srcIp = registration.device_ip
+						? escapeHtml(registration.device_ip) + (registration.device_port ? ':' + escapeHtml(String(registration.device_port)) : '')
+						: textEmpty;
+					html += '<tr>';
+					html += '<td><span class="rw-led ' + statusClass(status) + '"></span> ' + escapeHtml(registration.extension || textUnknown) + '</td>';
+					html += '<td>' + escapeHtml(displayLabel(status)) + '</td>';
+					html += '<td>' + escapeHtml(registration.description || '-') + '</td>';
+					html += '<td>' + srcIp + '</td>';
+					html += '<td>' + latencyText(registration, status) + '</td>';
+					html += '<td>' + contactExpiryText(registration.contact_expires_at) + '</td>';
+					html += '</tr>';
+				}
+				html += '</tbody></table>';
+				container.innerHTML = html;
+			} else {
+				let html = '<div class="rw-registration-map">';
+				for (const registration of visible) {
+					const status = registration.status || registration.last_known_status || 'Unknown';
+					html += '<div class="rw-map-tile">';
+					html += '<div class="rw-map-title"><span class="rw-led ' + statusClass(status) + '"></span><span>' + escapeHtml(registration.extension || textUnknown) + '</span></div>';
+					html += '<div class="rw-map-description">' + escapeHtml(registration.description || '-') + '</div>';
+					html += '<div class="rw-map-status">' + escapeHtml(displayLabel(status)) + '</div>';
+					for (const row of mapDetailRows(registration, status)) {
+						html += '<div class="rw-map-detail">' + escapeHtml(row[0]) + ': ' + escapeHtml(row[1]) + '</div>';
+					}
+					html += '</div>';
 				}
 				html += '</div>';
+				container.innerHTML = html;
 			}
-			html += '</div>';
-
-			container.innerHTML = html;
 		}
 		window.RegistrationWatchRenderRegistrationMap = renderRegistrationMap;
 
@@ -856,6 +905,28 @@ $_rwAssetVer = max(
 				renderRegistrationMap(latestMapRegistrations);
 			});
 		}
+
+		const btnViewCard = document.getElementById('rw-map-view-card');
+		const btnViewRow = document.getElementById('rw-map-view-row');
+		if (btnViewCard) {
+			btnViewCard.addEventListener('click', function() {
+				statusMapViewMode = 'card';
+				localStorage.setItem('rw-map-view-mode', 'card');
+				applyViewToggleState();
+				renderRegistrationMap(latestMapRegistrations);
+			});
+		}
+		if (btnViewRow) {
+			btnViewRow.addEventListener('click', function() {
+				statusMapViewMode = 'row';
+				localStorage.setItem('rw-map-view-mode', 'row');
+				applyViewToggleState();
+				renderRegistrationMap(latestMapRegistrations);
+			});
+		}
+
+		applyViewToggleState();
+		renderRegistrationMap(latestMapRegistrations);
 
 		function escapeHtml(text) {
 			if (!text) return '';

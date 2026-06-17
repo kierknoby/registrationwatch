@@ -308,6 +308,21 @@
 	margin-top: 4px;
 }
 
+.registrationwatch .rw-map-row-view {
+	width: 100%;
+	margin-bottom: 0;
+}
+
+.registrationwatch .rw-map-row-view .rw-led {
+	vertical-align: middle;
+	margin-right: 4px;
+}
+
+.registrationwatch .rw-map-row-view td {
+	vertical-align: middle !important;
+	font-size: 12px;
+}
+
 
 /* Registration Watch simplified UI */
 .registrationwatch code {
