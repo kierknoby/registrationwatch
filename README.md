@@ -38,15 +38,22 @@ Use with FreePBX/PBXact 17 only. Do not install on FreePBX/PBXact 16 or below.
 
 ## Installing
 
+Registration Watch is a community module and is not currently available through
+the FreePBX online module repository. Install from a local directory or from
+this GitHub repository.
+
+**Option 1: Install from an unpacked local module directory**
+
 Place the `registrationwatch` directory in `/var/www/html/admin/modules/`, then:
 
 ```sh
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
+cd ~
 ```
 
-For a developer install from this repository:
+**Option 2: Developer install from GitHub**
 
 ```sh
 cd /var/www/html/admin/modules
@@ -54,28 +61,81 @@ git clone https://github.com/kierknoby/registrationwatch.git registrationwatch
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
+cd ~
+```
+
+**Option 3: Developer install from a local copy**
+
+If you have a local copy of the repository, copy or symlink the
+`registrationwatch` directory into `/var/www/html/admin/modules/`, then:
+
+```sh
+fwconsole ma installlocal registrationwatch
+fwconsole chown
+fwconsole reload
+cd ~
 ```
 
 The module appears under **Reports > Registration Watch**.
 
 ## Updating Registration Watch
 
-Do not uninstall when updating. Uninstalling removes Registration Watch tables.
+Do not uninstall when updating. Uninstalling removes Registration Watch tables,
+settings, watched registrations, status history, alert history, and
+repeat-alert state.
 
-Check the installed version:
+Check the installed version before updating:
 
 ```sh
 fwconsole ma list | grep -i registrationwatch
-grep -n "<version>" /var/www/html/admin/modules/registrationwatch/module.xml
+grep "<version>" /var/www/html/admin/modules/registrationwatch/module.xml
 ```
 
-Update the files, then run:
+**Option 1: Update from an unpacked local module directory**
+
+Replace the contents of `/var/www/html/admin/modules/registrationwatch/` with
+the new release files, then:
 
 ```sh
 fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
+cd ~
 ```
+
+**Option 2: Developer update from GitHub**
+
+```sh
+git config --global --add safe.directory /var/www/html/admin/modules/registrationwatch
+cd /var/www/html/admin/modules/registrationwatch
+git pull origin main
+fwconsole ma installlocal registrationwatch
+fwconsole chown
+fwconsole reload
+cd ~
+```
+
+**Option 3: Developer update from a local copy**
+
+Replace or re-copy the `registrationwatch` directory into
+`/var/www/html/admin/modules/`, then:
+
+```sh
+fwconsole ma installlocal registrationwatch
+fwconsole chown
+fwconsole reload
+cd ~
+```
+
+Check the installed version after updating:
+
+```sh
+fwconsole ma list | grep -i registrationwatch
+grep "<version>" /var/www/html/admin/modules/registrationwatch/module.xml
+```
+
+Open **Reports > Registration Watch** and confirm that existing watched
+registrations, settings, and history are still present.
 
 ## Background Checks
 
