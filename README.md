@@ -359,12 +359,6 @@ GPLv3+. See LICENSE.
 
 ## Release History
 
-### Release history note
-
-Versions before 1.2.0 were pilot releases used to prove the original idea, test alert behaviour, and explore what a FreePBX/PBXact 17 registration-monitoring module could become.
-
-Registration Watch 1.2.0 is the first release that reflects the settled direction of the module: registration-based monitoring, per-registration alert control, repeat alerts, remembered UI state, and clearer FreePBX 17-only behaviour.
-
 ### 1.2.0, minor release, 17 June 2026
 
 Released by `@kierknoby, Kieran Knowles-Byrne // FreePBX UK`.
