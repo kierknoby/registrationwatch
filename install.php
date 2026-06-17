@@ -31,7 +31,6 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_registrations (
 	contact_count INT UNSIGNED NOT NULL DEFAULT 1,
 	contact_expires_at DATETIME NULL,
 	qualify_frequency INT UNSIGNED NULL,
-	snoozed_until DATETIME NULL,
 	last_heartbeat_at DATETIME NULL,
 	last_seen_at DATETIME NULL,
 	last_checked_at DATETIME NULL,
@@ -133,13 +132,6 @@ $sql[] = "CREATE TABLE IF NOT EXISTS registrationwatch_alert_escalation (
 
 foreach ($sql as $statement) {
 	$db->query($statement);
-}
-
-// Upgrade: add snoozed_until column to registrations table if not present (1.2.0).
-try {
-	$db->query('ALTER TABLE registrationwatch_registrations ADD COLUMN snoozed_until DATETIME NULL');
-} catch (\Throwable $e) {
-	// Column already exists — safe to ignore.
 }
 
 $defaultSettings = [

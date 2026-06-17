@@ -384,32 +384,13 @@
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-selection {
-        width: 165px;
+        width: 130px;
 }
 
 .registrationwatch .rw-alerting-cell {
         display: flex;
         flex-direction: column;
         gap: 4px;
-}
-
-.registrationwatch .rw-monitored-cell {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        flex-wrap: nowrap;
-        gap: 8px;
-}
-
-.registrationwatch .rw-row-snooze-group {
-        flex-shrink: 0;
-}
-
-.registrationwatch .rw-row-snooze-inactive {
-        color: #888;
-        font-size: 12px;
-        white-space: nowrap;
-        cursor: default;
 }
 
 .registrationwatch .rw-alerting-indicator {

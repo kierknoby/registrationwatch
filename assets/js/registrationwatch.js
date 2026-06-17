@@ -199,40 +199,11 @@
 		return status === 'unreachable' || status === 'not registered';
 	}
 
-	function rowSnoozeSelectHtml() {
-		return '<div class="btn-group rw-row-snooze-group">'
-			+ '<button type="button" class="btn btn-xs btn-default dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">'
-			+ '💤 Snooze <span class="caret"></span>'
-			+ '</button>'
-			+ '<ul class="dropdown-menu">'
-			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="300">Snooze 5m</a></li>'
-			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="900">Snooze 15m</a></li>'
-			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="1800">Snooze 30m</a></li>'
-			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="3600">Snooze 1h</a></li>'
-			+ '<li><a href="#" class="rw-row-snooze-option" data-seconds="86400">Snooze 1d</a></li>'
-			+ '</ul>'
-			+ '</div>';
-	}
-
-	function rowSnoozeInactiveHtml() {
-		return '<span class="rw-row-snooze-inactive" title="Global monitoring snooze is active">💤 Snoozed</span>';
-	}
-
-	function rowSnoozeControlHtml() {
-		return (currentMonitoringState && currentMonitoringState.state === 'snoozed')
-			? rowSnoozeInactiveHtml()
-			: rowSnoozeSelectHtml();
-	}
-
 	function buildMonitoredCellHtml(enabled) {
-		var toggleHtml = '<label class="rw-toggle">'
+		return '<label class="rw-toggle">'
 			+ '<input type="checkbox" class="rw-enabled"' + (enabled ? ' checked' : '') + '>'
 			+ '<span class="rw-toggle-slider"></span>'
 			+ '</label>';
-		if (enabled) {
-			return '<div class="rw-monitored-cell">' + toggleHtml + rowSnoozeControlHtml() + '</div>';
-		}
-		return toggleHtml;
 	}
 
 	function watchedExtensionRowHtml(registration) {
@@ -244,7 +215,6 @@
 			monitoredCell = '<div class="rw-alerting-cell">'
 				+ '<small class="rw-alerting-indicator">Actively alerting</small>'
 				+ '<button type="button" class="btn btn-xs btn-warning rw-disable-alerting" data-registration-id="' + id + '" title="Disable alerting for this extension">Disable alerting</button>'
-				+ rowSnoozeControlHtml()
 				+ '</div>';
 		} else {
 			monitoredCell = buildMonitoredCellHtml(parseInt(registration.enabled, 10));
@@ -503,11 +473,6 @@
 			}
 		}
 
-		var globalSnoozed = state === 'snoozed';
-		var snoozeCtrlHtml = globalSnoozed ? rowSnoozeInactiveHtml() : rowSnoozeSelectHtml();
-		$('.registrationwatch .rw-monitored-cell, .registrationwatch .rw-alerting-cell').each(function () {
-			$(this).find('.rw-row-snooze-group, .rw-row-snooze-inactive').replaceWith(snoozeCtrlHtml);
-		});
 	}
 
 	window.RegistrationWatchUpdateMonitoringBanner = updateMonitoringBanner;
@@ -848,44 +813,6 @@
 				btn.prop('disabled', false);
 			});
 		});
-
-		document.addEventListener('click', function (e) {
-			var link = e.target.closest('.rw-row-snooze-option');
-			if (!link) { return; }
-			if (!link.closest('.registrationwatch')) { return; }
-			e.preventDefault();
-			e.stopPropagation();
-			var seconds = parseInt(link.getAttribute('data-seconds'), 10);
-			if (!seconds || [300, 900, 1800, 3600, 86400].indexOf(seconds) === -1) { return; }
-			var row = link.closest('tr');
-			var registrationId = row ? row.getAttribute('data-registration-id') : null;
-			if (!registrationId) {
-				showMessage('Unable to identify registration. Please reload the page and try again.', 'error');
-				return;
-			}
-			var token = registrationWatchToken(root);
-			if (!token) {
-				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
-				return;
-			}
-			$.ajax({
-				url: 'ajax.php?module=registrationwatch',
-				method: 'POST',
-				dataType: 'json',
-				data: {
-					command: 'snoozeregistration',
-					registration_id: registrationId,
-					seconds: seconds,
-					token: token
-				}
-			}).done(function (response) {
-				if (!response || !response.status) {
-					showMessage(response && response.message ? response.message : 'Unable to snooze registration.', 'error');
-				}
-			}).fail(function () {
-				showMessage('Unable to snooze registration.', 'error');
-			});
-		}, true);
 
 		$('#rw-save-alerts').on('click', function () {
 			var button = $(this);
