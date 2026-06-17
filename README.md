@@ -353,6 +353,10 @@ fwconsole reload
 
 GPLv3+. See LICENSE.
 
+## AI disclosure
+
+This module has been developed with AI assistance for code generation, review, testing, and documentation. Changes should still be reviewed, tested, and accepted by a human maintainer before deployment.
+
 ## Author
 
 @kierknoby, Kieran Knowles-Byrne // FreePBX UK
