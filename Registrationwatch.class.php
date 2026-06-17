@@ -2604,6 +2604,8 @@ class Registrationwatch implements \BMO {
 			'contact_uri' => $row['contact_uri'] ?? null,
 			'latency_ms' => $row['latency_ms'] ?? null,
 			'created_at' => $row['active_since'] ?: $now,
+			'repeat_mode' => (string)($row['repeat_mode'] ?? ''),
+			'reminder_n' => ((int)($row['alert_count'] ?? 0)) + 1,
 		];
 	}
 
@@ -3163,11 +3165,13 @@ class Registrationwatch implements \BMO {
 		$extension = (string)$transition['extension'];
 		$toState = $this->normaliseState($transition['to_state'] ?? '');
 		$subjectStatus = $this->stateLabel($toState);
+		$isReminder = ($transition['reason'] ?? '') === 'reminder';
 		if ($alertType === 'recovery') {
 			$subjectStatus = 'has recovered';
 		}
 
-		$subject = 'Registration Watch: ' . $extension . ' ' . ($alertType === 'recovery' ? $subjectStatus : 'is ' . $subjectStatus);
+		$still = ($isReminder && $alertType !== 'recovery') ? 'still ' : '';
+		$subject = 'Registration Watch: ' . $extension . ' ' . ($alertType === 'recovery' ? $subjectStatus : 'is ' . $still . $subjectStatus);
 		$latency = $transition['latency_ms'] !== null && $transition['latency_ms'] !== '' ? $transition['latency_ms'] . ' ms' : 'Unavailable';
 		if ($toState === self::STATUS_REGISTERED_NO_QUALIFY) {
 			$latency = 'Unavailable; qualify is not enabled.';
@@ -3187,28 +3191,40 @@ class Registrationwatch implements \BMO {
 		}
 		$addressDetails = $this->registrationAddressDetails($contactUriForAddress, $sourceIpForAddress, $sourcePortForAddress);
 		$addressPrefix = $historicalAddress ? 'Last ' : '';
-		$message = [
-			'Registration Watch state change',
-			'',
-			'Extension: ' . $extension,
-			'New state: ' . $this->stateLabel($toState),
-			'Reason: ' . $this->reasonLabel($transition['reason'] ?? ''),
-			'Latency: ' . $latency,
-			'',
-			'Device: ' . ($deviceName !== '' ? $deviceName : 'Unknown'),
-			'Version: ' . ($firmwareVersion !== '' ? $firmwareVersion : 'Unknown'),
-			$addressPrefix . 'Device IP: ' . (($addressDetails['device_ip'] ?? '') !== '' ? $addressDetails['device_ip'] : 'Unknown'),
-			$addressPrefix . 'Device Port: ' . (($addressDetails['device_port'] ?? '') !== '' ? $addressDetails['device_port'] : 'Unknown'),
-			$addressPrefix . 'Network IP: ' . (($addressDetails['network_ip'] ?? '') !== '' ? $addressDetails['network_ip'] : 'Unknown'),
-			$addressPrefix . 'Network Port: ' . (($addressDetails['network_port'] ?? '') !== '' ? $addressDetails['network_port'] : 'Unknown'),
-			'Contact expires: ' . (($registrationDetails['contact_expires_at'] ?? '') !== '' ? $registrationDetails['contact_expires_at'] : 'Unknown'),
-			'Qualify frequency: ' . (($registrationDetails['qualify_frequency'] ?? '') !== '' ? $registrationDetails['qualify_frequency'] . ' seconds' : 'Unknown'),
-			'Transition time: ' . $transition['created_at'],
-			'Source: Asterisk',
-			'',
-			'Please note: email deliveries can be delayed.',
-			'Check current status in the FreePBX module.',
-		];
+		$reasonLine = ['Reason: ' . $this->reasonLabel($transition['reason'] ?? '')];
+		if ($isReminder) {
+			$reasonLine[] = 'Repeat mode: ' . $this->repeatModeLabel((string)($transition['repeat_mode'] ?? ''));
+			$reminderN = (int)($transition['reminder_n'] ?? 0);
+			if ($reminderN > 0) {
+				$reasonLine[] = 'Reminder: ' . $reminderN;
+			}
+		}
+		$message = array_merge(
+			[
+				'Registration Watch state change',
+				'',
+				'Extension: ' . $extension,
+				'New state: ' . $this->stateLabel($toState),
+			],
+			$reasonLine,
+			[
+				'Latency: ' . $latency,
+				'',
+				'Device: ' . ($deviceName !== '' ? $deviceName : 'Unknown'),
+				'Version: ' . ($firmwareVersion !== '' ? $firmwareVersion : 'Unknown'),
+				$addressPrefix . 'Device IP: ' . (($addressDetails['device_ip'] ?? '') !== '' ? $addressDetails['device_ip'] : 'Unknown'),
+				$addressPrefix . 'Device Port: ' . (($addressDetails['device_port'] ?? '') !== '' ? $addressDetails['device_port'] : 'Unknown'),
+				$addressPrefix . 'Network IP: ' . (($addressDetails['network_ip'] ?? '') !== '' ? $addressDetails['network_ip'] : 'Unknown'),
+				$addressPrefix . 'Network Port: ' . (($addressDetails['network_port'] ?? '') !== '' ? $addressDetails['network_port'] : 'Unknown'),
+				'Contact expires: ' . (($registrationDetails['contact_expires_at'] ?? '') !== '' ? $registrationDetails['contact_expires_at'] : 'Unknown'),
+				'Qualify frequency: ' . (($registrationDetails['qualify_frequency'] ?? '') !== '' ? $registrationDetails['qualify_frequency'] . ' seconds' : 'Unknown'),
+				'Transition time: ' . $transition['created_at'],
+				'Source: Asterisk',
+				'',
+				'Please note: email deliveries can be delayed.',
+				'Check current status in the FreePBX module.',
+			]
+		);
 
 		return [
 			'subject' => $subject,
@@ -3556,6 +3572,16 @@ class Registrationwatch implements \BMO {
 		}
 
 		return $reason !== '' ? $reason : '-';
+	}
+
+	private function repeatModeLabel(string $repeatMode): string {
+		switch ($this->normaliseRepeatMode($repeatMode)) {
+			case self::REPEAT_MODE_FIVE_MINUTES: return 'Every 5 minutes';
+			case self::REPEAT_MODE_HOURLY:       return 'Hourly';
+			case self::REPEAT_MODE_DAILY:        return 'Daily';
+			case self::REPEAT_MODE_ESCALATING:   return 'Escalating';
+			default:                             return $repeatMode !== '' ? $repeatMode : 'Never';
+		}
 	}
 
 	private function stateLabel(?string $state): string {
