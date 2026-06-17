@@ -174,7 +174,9 @@ Repeat alert modes:
 * Every 5 minutes: repeat every 5 minutes while the registration remains unavailable.
 * Hourly: repeat once per hour while unavailable.
 * Daily: repeat once per day while unavailable.
-* Escalating: uses a Fibonacci-style backoff schedule, starting with shorter reminders and gradually increasing the interval up to daily.
+* Escalating: uses a Fibonacci-style backoff schedule, starting with shorter reminders and gradually increasing the interval up to daily. The wait between reminders follows Fibonacci multipliers on a 5-minute base:
+  * 5 min, 5 min, 10 min, 15 min, 25 min, 40 min, 65 min, 105 min, …
+  * Capped at 24 hours once the interval reaches the daily ceiling.
 
 Stored legacy `fibonacci` repeat-mode values are treated as Escalating.
 
@@ -270,6 +272,7 @@ php -l install.php
 php -l uninstall.php
 php -l views/main.php
 php -r '$xml = simplexml_load_file("module.xml"); echo $xml ? "module.xml parsed\n" : "module.xml failed\n";'
+php tests/repeat_alerting_contract.php
 ```
 
 On a real FreePBX/PBXact 17 system:
