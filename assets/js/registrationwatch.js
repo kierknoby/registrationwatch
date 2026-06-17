@@ -246,6 +246,14 @@
 		'</tr>';
 	}
 
+	function isWatchedTableInteractionActive() {
+		var active = document.activeElement;
+		if (!active) { return false; }
+		var $active = $(active);
+		return $active.closest('.rw-watched-registrations-table').length > 0
+			&& $active.is('select, input, button');
+	}
+
 	function renderWatchedExtensionsTable(registrations) {
 		var $panel = watchedExtensionsPanel();
 		if (!$panel.length) {
@@ -670,7 +678,9 @@
 					showMessage(response && response.message ? response.message : 'Unable to refresh registration status.', 'error');
 					return;
 				}
-				renderWatchedExtensionsTable(response.registrations);
+				if (!isAutomatic || !isWatchedTableInteractionActive()) {
+					renderWatchedExtensionsTable(response.registrations);
+				}
 				renderStatusRows(response.registrations);
 				if (window.RegistrationWatchRenderRegistrationMap) {
 					window.RegistrationWatchRenderRegistrationMap(response.registrations);
