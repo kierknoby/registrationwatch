@@ -195,6 +195,14 @@ $_rwDisplayContact = function ($value) {
 	return $value !== '' ? $value : '-';
 };
 
+$_rwIsActivelyAlerting = function ($registration) {
+	if (empty($registration['enabled'])) {
+		return false;
+	}
+	$status = strtolower(trim((string)($registration['last_known_status'] ?? '')));
+	return $status === 'unreachable' || $status === 'not registered';
+};
+
 $_rwMapDetailRows = function ($registration) use ($_rwContactExpiryText, $_rwIsRegisteredNoQualify) {
 	return [
 		[_('Device IP'), ($registration['device_ip'] ?? '') !== '' ? (string)$registration['device_ip'] : '-'],
@@ -346,10 +354,18 @@ $_rwAssetVer = max(
 									<?php foreach ($registrations as $registration): ?>
 										<tr data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>" data-extension="<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?>" <?php echo !empty($registration['enabled']) ? 'class="rw-row-enabled"' : ''; ?>>
 											<td data-label="<?php echo _('Monitored'); ?>">
+												<?php if ($_rwIsActivelyAlerting($registration)): ?>
+													<button type="button" class="btn btn-xs btn-warning rw-disable-monitoring"
+															data-registration-id="<?php echo (int)($registration['id'] ?? $registration['registration_id'] ?? 0); ?>"
+															title="<?php echo _('Disable monitoring for this extension'); ?>">
+														🚨 <?php echo _('Disable monitoring'); ?>
+													</button>
+												<?php else: ?>
 													<label class="rw-toggle">
 														<input type="checkbox" class="rw-enabled" <?php echo !empty($registration['enabled']) ? 'checked' : ''; ?>>
 														<span class="rw-toggle-slider"></span>
 													</label>
+												<?php endif; ?>
 											</td>
 											<td data-label="<?php echo _('Extension'); ?>">
 												<?php echo htmlspecialchars($registration['extension'], ENT_QUOTES, 'UTF-8'); ?>

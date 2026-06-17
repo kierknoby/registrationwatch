@@ -384,7 +384,13 @@
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-selection {
-        width: 58px;
+        width: 130px;
+}
+
+.registrationwatch .rw-disable-monitoring {
+        white-space: normal;
+        text-align: left;
+        line-height: 1.3;
 }
 
 .registrationwatch .rw-watched-registrations-table .rw-col-extension {

@@ -187,18 +187,24 @@
 		return 'No watched extensions discovered yet. Registration Watch will show extensions here once automatic checks run.';
 	}
 
+	function isActivelyAlerting(registration) {
+		if (!parseInt(registration.enabled, 10)) {
+			return false;
+		}
+		var status = String(registration.last_known_status || registration.status || '').trim().toLowerCase();
+		return status === 'unreachable' || status === 'not registered';
+	}
+
 	function watchedExtensionRowHtml(registration) {
 		var id = parseInt(registration.registration_id || registration.id, 10) || 0;
 		var notes = registration.notes || '';
 		var notesStatus = registration.notes_updated_at ? 'Saved ' + registration.notes_updated_at : '';
+		var monitoredCell = isActivelyAlerting(registration)
+			? '<button type="button" class="btn btn-xs btn-warning rw-disable-monitoring" data-registration-id="' + id + '" title="Disable monitoring for this extension">🚨 Disable monitoring</button>'
+			: '<label class="rw-toggle"><input type="checkbox" class="rw-enabled"' + (parseInt(registration.enabled, 10) ? ' checked' : '') + '><span class="rw-toggle-slider"></span></label>';
 
 		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '"' + (parseInt(registration.enabled, 10) ? ' class="rw-row-enabled"' : '') + '>' +
-			'<td data-label="Monitored">' +
-				'<label class="rw-toggle">' +
-					'<input type="checkbox" class="rw-enabled"' + (parseInt(registration.enabled, 10) ? ' checked' : '') + '>' +
-					'<span class="rw-toggle-slider"></span>' +
-				'</label>' +
-			'</td>' +
+			'<td data-label="Monitored">' + monitoredCell + '</td>' +
 			'<td data-label="Extension">' + escapeHtml(registration.extension) + '</td>' +
 			'<td data-label="Description">' + escapeHtml(registration.description || '-') + '</td>' +
 			'<td data-label="Repeat alerts">' +
@@ -676,6 +682,48 @@
 		$(window).on('unload', function () {
 			stopAutoRefresh();
 			stopSnoozeCountdown();
+		});
+
+		root.on('click', '.rw-disable-monitoring', function () {
+			var btn = $(this);
+			var row = btn.closest('tr');
+			var registrationId = btn.data('registration-id') || row.data('registration-id');
+			var token = registrationWatchToken(root);
+
+			if (!token) {
+				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
+				return;
+			}
+
+			btn.prop('disabled', true);
+			$.ajax({
+				url: 'ajax.php?module=registrationwatch',
+				method: 'POST',
+				dataType: 'json',
+				data: {
+					command: 'setenabled',
+					registration_id: registrationId,
+					enabled: 0,
+					token: token
+				}
+			}).done(function (response) {
+				if (!response || !response.status) {
+					showMessage(response && response.message ? response.message : 'Unable to disable monitoring.', 'error');
+					btn.prop('disabled', false);
+					return;
+				}
+				row.removeClass('rw-row-enabled');
+				btn.closest('td').html(
+					'<label class="rw-toggle">' +
+					'<input type="checkbox" class="rw-enabled">' +
+					'<span class="rw-toggle-slider"></span>' +
+					'</label>'
+				);
+				showMessage(response.message || 'Monitoring disabled.', 'success');
+			}).fail(function () {
+				showMessage('Unable to disable monitoring.', 'error');
+				btn.prop('disabled', false);
+			});
 		});
 
 		root.on('click', '.rw-snooze-btn', function () {
