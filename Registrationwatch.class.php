@@ -2666,12 +2666,16 @@ class Registrationwatch implements \BMO {
 		ksort($typeCounts);
 		ksort($registrations);
 
-		$subject = sprintf(_('Registration Watch: Storm Summary (%d alerts suppressed)'), $total);
+		$subject = $total === 1
+			? _('Registration Watch: Storm Summary (1 alert suppressed)')
+			: sprintf(_('Registration Watch: Storm Summary (%d alerts suppressed)'), $total);
 		$message = [
 			_('Registration Watch Storm Summary'),
 			'',
-			sprintf(_('%d alert emails were suppressed in this processing pass.'), $total),
-			_('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. The count is per registration, not per extension, so an extension with several devices can contribute several alerts. Use 0 to disable.'),
+			$total === 1
+				? _('1 alert email was suppressed in this processing pass.')
+				: sprintf(_('%d alert emails were suppressed in this processing pass.'), $total),
+			_('Storm Threshold limits large batches of alerts generated in the same processing pass. It reduces email floods from sudden widespread registration changes, but it is not full correlated-outage detection. The count is per registration. Use 0 to disable.'),
 			'',
 			'Time: ' . $now,
 			'',
