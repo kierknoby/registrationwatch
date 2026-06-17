@@ -41,7 +41,7 @@ Use with FreePBX/PBXact 17 only. Do not install on FreePBX/PBXact 16 or below.
 Place the `registrationwatch` directory in `/var/www/html/admin/modules/`, then:
 
 ```sh
-fwconsole ma install registrationwatch
+fwconsole ma installlocal registrationwatch
 fwconsole chown
 fwconsole reload
 ```
