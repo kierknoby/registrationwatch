@@ -11,6 +11,47 @@
 	margin-top: 12px;
 }
 
+.registrationwatch .rw-monitoring-banner {
+	margin-top: 14px;
+	padding: 12px 16px;
+	border-radius: 4px;
+	border-left: 4px solid #5cb85c;
+	background: #f5fff5;
+}
+
+.registrationwatch .rw-monitoring-active {
+	border-left-color: #5cb85c;
+	background: #f5fff5;
+}
+
+.registrationwatch .rw-monitoring-inactive {
+	border-left-color: #aaa;
+	background: #f8f8f8;
+}
+
+.registrationwatch .rw-monitoring-snoozed {
+	border-left-color: #f0ad4e;
+	background: #fffcf0;
+}
+
+.registrationwatch .rw-monitoring-banner strong {
+	font-size: 15px;
+}
+
+.registrationwatch .rw-monitoring-desc {
+	margin: 4px 0 0 0;
+	color: #555;
+}
+
+.registrationwatch .rw-monitoring-actions {
+	margin-top: 10px;
+}
+
+.registrationwatch .rw-monitoring-actions .btn {
+	margin-right: 6px;
+	margin-bottom: 4px;
+}
+
 .registrationwatch .rw-section {
 	margin-top: 18px;
 }

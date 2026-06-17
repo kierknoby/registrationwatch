@@ -34,6 +34,7 @@
 			sent: 'Sent',
 			failed: 'Failed',
 			pending: 'Pending',
+			suppressed: 'Suppressed',
 			test: 'Test'
 		};
 
@@ -352,6 +353,102 @@
 		};
 	}
 
+	var snoozeCountdownTimer = null;
+	var snoozeUntilTs = 0;
+
+	function formatCountdown(remainingSeconds) {
+		if (remainingSeconds <= 0) {
+			return '0 secs remaining';
+		}
+		var mins = Math.floor(remainingSeconds / 60);
+		var secs = remainingSeconds % 60;
+		if (mins > 0) {
+			return mins + ' min' + (mins === 1 ? '' : 's') + ' ' + secs + ' secs remaining';
+		}
+		return secs + ' secs remaining';
+	}
+
+	function stopSnoozeCountdown() {
+		if (snoozeCountdownTimer) {
+			clearInterval(snoozeCountdownTimer);
+			snoozeCountdownTimer = null;
+		}
+		snoozeUntilTs = 0;
+	}
+
+	function startSnoozeCountdown(untilTs) {
+		stopSnoozeCountdown();
+		snoozeUntilTs = untilTs;
+
+		function tick() {
+			var remaining = Math.max(0, Math.floor((snoozeUntilTs - Date.now()) / 1000));
+			var el = document.getElementById('rw-snooze-countdown');
+			if (el) {
+				el.textContent = formatCountdown(remaining);
+			}
+			if (remaining <= 0) {
+				stopSnoozeCountdown();
+				updateMonitoringBanner({state: 'active', snoozed_until: null});
+			}
+		}
+
+		tick();
+		snoozeCountdownTimer = setInterval(tick, 10000);
+	}
+
+	function updateMonitoringBanner(monitoringState) {
+		var banner = document.getElementById('rw-monitoring-banner');
+		if (!banner) {
+			return;
+		}
+
+		stopSnoozeCountdown();
+
+		var state = monitoringState && monitoringState.state ? monitoringState.state : 'active';
+		var html = '';
+
+		if (state === 'inactive') {
+			banner.className = 'rw-monitoring-banner rw-monitoring-inactive';
+			html = '<div class="rw-monitoring-banner-body">'
+				+ '<strong>Monitoring is inactive</strong>'
+				+ '<p class="rw-monitoring-desc">No watched extensions are currently monitored.</p>'
+				+ '</div>';
+		} else if (state === 'snoozed') {
+			banner.className = 'rw-monitoring-banner rw-monitoring-snoozed';
+			html = '<div class="rw-monitoring-banner-body">'
+				+ '<strong>Monitoring is snoozed</strong>'
+				+ '<p class="rw-monitoring-desc">Alerts are paused. Status checks continue.</p>'
+				+ '<p class="rw-monitoring-desc"><span id="rw-snooze-countdown">Calculating...</span></p>'
+				+ '<div class="rw-monitoring-actions">'
+				+ '<button type="button" class="btn btn-sm btn-default rw-resume-btn">Resume monitoring</button>'
+				+ '</div>'
+				+ '</div>';
+		} else {
+			banner.className = 'rw-monitoring-banner rw-monitoring-active';
+			html = '<div class="rw-monitoring-banner-body">'
+				+ '<strong>Monitoring active</strong>'
+				+ '<p class="rw-monitoring-desc">Status checks are running. Alerts will be sent for monitored extensions.</p>'
+				+ '<div class="rw-monitoring-actions">'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="300">Pause 5m</button>'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="900">Pause 15m</button>'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="1800">Pause 30m</button>'
+				+ '<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="3600">Pause 1h</button>'
+				+ '</div>'
+				+ '</div>';
+		}
+
+		banner.innerHTML = html;
+
+		if (state === 'snoozed' && monitoringState.snoozed_until) {
+			var untilTs = Date.parse(String(monitoringState.snoozed_until).replace(' ', 'T'));
+			if (!isNaN(untilTs)) {
+				startSnoozeCountdown(untilTs);
+			}
+		}
+	}
+
+	window.RegistrationWatchUpdateMonitoringBanner = updateMonitoringBanner;
+
 	function updateTimeDiagnostics(timeDiagnostics) {
 		if (!timeDiagnostics) {
 			return;
@@ -533,6 +630,9 @@
 					renderAlertHistoryRows(response.alertHistory);
 				}
 				updateTimeDiagnostics(response.timeDiagnostics);
+				if (response.monitoringState) {
+					updateMonitoringBanner(response.monitoringState);
+				}
 				if (!isAutomatic) {
 					showMessage(response.message || 'Registration status refreshed.', 'success');
 				}
@@ -575,6 +675,67 @@
 
 		$(window).on('unload', function () {
 			stopAutoRefresh();
+			stopSnoozeCountdown();
+		});
+
+		root.on('click', '.rw-snooze-btn', function () {
+			var btn = $(this);
+			var seconds = parseInt(btn.data('seconds'), 10) || 0;
+			var token = registrationWatchToken(root);
+			if (!token) {
+				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
+				return;
+			}
+			btn.prop('disabled', true);
+			$.ajax({
+				url: 'ajax.php?module=registrationwatch',
+				method: 'POST',
+				dataType: 'json',
+				data: {
+					command: 'snoozemonitoring',
+					seconds: seconds,
+					token: token
+				}
+			}).done(function (response) {
+				if (!response || !response.status) {
+					showMessage(response && response.message ? response.message : 'Unable to snooze monitoring.', 'error');
+					btn.prop('disabled', false);
+					return;
+				}
+				updateMonitoringBanner(response.monitoringState);
+			}).fail(function () {
+				showMessage('Unable to snooze monitoring.', 'error');
+				btn.prop('disabled', false);
+			});
+		});
+
+		root.on('click', '.rw-resume-btn', function () {
+			var btn = $(this);
+			var token = registrationWatchToken(root);
+			if (!token) {
+				showMessage('Security token unavailable. Please reload the page and try again.', 'error');
+				return;
+			}
+			btn.prop('disabled', true);
+			$.ajax({
+				url: 'ajax.php?module=registrationwatch',
+				method: 'POST',
+				dataType: 'json',
+				data: {
+					command: 'resumemonitoring',
+					token: token
+				}
+			}).done(function (response) {
+				if (!response || !response.status) {
+					showMessage(response && response.message ? response.message : 'Unable to resume monitoring.', 'error');
+					btn.prop('disabled', false);
+					return;
+				}
+				updateMonitoringBanner(response.monitoringState);
+			}).fail(function () {
+				showMessage('Unable to resume monitoring.', 'error');
+				btn.prop('disabled', false);
+			});
 		});
 
 		$('#rw-save-alerts').on('click', function () {

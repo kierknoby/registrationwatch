@@ -60,6 +60,8 @@ $registrationEmptyText = $pollIntervalSeconds > 0
 	? sprintf(_('No watched extensions discovered yet. Registration Watch checks automatically every %d seconds; extensions will appear here once discovered.'), $pollIntervalSeconds)
 	: _('No watched extensions discovered yet. Registration Watch will show extensions here once automatic checks run.');
 $csrfToken = isset($csrfToken) ? (string)$csrfToken : '';
+$monitoringState = isset($monitoringState) && is_array($monitoringState) ? $monitoringState : ['state' => 'active', 'snoozed_until' => null];
+$_rwMonitoringBannerState = in_array($monitoringState['state'] ?? '', ['active', 'inactive', 'snoozed'], true) ? $monitoringState['state'] : 'active';
 $repeatModeOptions = [
 	'never' => _('Never'),
 	'5m' => _('Every 5 minutes'),
@@ -123,6 +125,7 @@ $_rwDisplayLabel = function ($value) {
 		'sent' => 'Sent',
 		'failed' => 'Failed',
 		'pending' => 'Pending',
+		'suppressed' => 'Suppressed',
 		'test' => 'Test',
 	];
 
@@ -224,9 +227,36 @@ $_rwAssetVer = max(
 				<small class="text-muted" style="font-size:0.5em;">v<?php echo htmlspecialchars($moduleVersion, ENT_QUOTES, 'UTF-8'); ?></small>
 			</h1>
 
-			<div id="rw-message" class="alert rw-message" style="<?php echo $refreshError === '' ? 'display:none;' : ''; ?>">
-				<?php echo htmlspecialchars($refreshError, ENT_QUOTES, 'UTF-8'); ?>
+			<div id="rw-monitoring-banner" class="rw-monitoring-banner rw-monitoring-<?php echo htmlspecialchars($_rwMonitoringBannerState, ENT_QUOTES, 'UTF-8'); ?>">
+				<?php if ($_rwMonitoringBannerState === 'inactive'): ?>
+					<div class="rw-monitoring-banner-body">
+						<strong><?php echo _('Monitoring is inactive'); ?></strong>
+						<p class="rw-monitoring-desc"><?php echo _('No watched extensions are currently monitored.'); ?></p>
+					</div>
+				<?php elseif ($_rwMonitoringBannerState === 'snoozed'): ?>
+					<div class="rw-monitoring-banner-body">
+						<strong><?php echo _('Monitoring is snoozed'); ?></strong>
+						<p class="rw-monitoring-desc"><?php echo _('Alerts are paused. Status checks continue.'); ?></p>
+						<p class="rw-monitoring-desc"><span id="rw-snooze-countdown"><?php echo _('Calculating...'); ?></span></p>
+						<div class="rw-monitoring-actions">
+							<button type="button" class="btn btn-sm btn-default rw-resume-btn"><?php echo _('Resume monitoring'); ?></button>
+						</div>
+					</div>
+				<?php else: ?>
+					<div class="rw-monitoring-banner-body">
+						<strong><?php echo _('Monitoring active'); ?></strong>
+						<p class="rw-monitoring-desc"><?php echo _('Status checks are running. Alerts will be sent for monitored extensions.'); ?></p>
+						<div class="rw-monitoring-actions">
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="300"><?php echo _('Pause 5m'); ?></button>
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="900"><?php echo _('Pause 15m'); ?></button>
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="1800"><?php echo _('Pause 30m'); ?></button>
+							<button type="button" class="btn btn-sm btn-default rw-snooze-btn" data-seconds="3600"><?php echo _('Pause 1h'); ?></button>
+						</div>
+					</div>
+				<?php endif; ?>
 			</div>
+
+			<div id="rw-message" class="alert rw-message" style="display:none;"></div>
 		</div>
 	</div>
 
@@ -626,6 +656,10 @@ $_rwAssetVer = max(
 		const textEmpty = '-';
 		const textExpired = <?php echo json_encode(_('Expired')); ?>;
 		let latestMapRegistrations = <?php echo json_encode($mapRegistrations); ?>;
+		const rwInitialMonitoringState = <?php echo json_encode($monitoringState); ?>;
+		if (window.RegistrationWatchUpdateMonitoringBanner) {
+			window.RegistrationWatchUpdateMonitoringBanner(rwInitialMonitoringState);
+		}
 
 		function statusClass(status) {
 			switch (String(status || 'Unknown').trim().toLowerCase()) {
@@ -681,6 +715,7 @@ $_rwAssetVer = max(
 				storm_suppressed: 'Storm suppressed',
 				storm_summary_failed: 'Storm summary failed',
 				pending: 'Pending',
+				suppressed: 'Suppressed',
 				test: 'Test'
 			};
 

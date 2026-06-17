@@ -56,6 +56,7 @@ class Registrationwatch implements \BMO {
 		'topology_poll_interval_seconds' => '10',
 		'status_history_prune_policy' => 'never',
 		'alert_history_prune_policy' => 'never',
+		'monitoring_snoozed_until' => '',
 	];
 
 	/** @var \FreePBX */
@@ -260,6 +261,8 @@ class Registrationwatch implements \BMO {
 			case 'saveprunepolicy':
 			case 'deletestatushistoryrow':
 			case 'deletealerthistoryrow':
+			case 'snoozemonitoring':
+			case 'resumemonitoring':
 				return true;
 		}
 
@@ -302,6 +305,10 @@ class Registrationwatch implements \BMO {
 				return $this->handleDeleteStatusHistoryRow();
 			case 'deletealerthistoryrow':
 				return $this->handleDeleteAlertHistoryRow();
+			case 'snoozemonitoring':
+				return $this->handleSnoozeMonitoring();
+			case 'resumemonitoring':
+				return $this->handleResumeMonitoring();
 		}
 
 		return ['status' => false, 'message' => _('Unknown command')];
@@ -319,6 +326,7 @@ class Registrationwatch implements \BMO {
 				'alertHistory' => $data['alertHistory'],
 				'lastRefresh' => $data['lastRefresh'],
 				'timeDiagnostics' => $data['timeDiagnostics'],
+				'monitoringState' => $data['monitoringState'],
 			];
 		} catch (\Exception $e) {
 			$message = _('Failed to refresh registration status. Please check the system logs.');
@@ -583,6 +591,7 @@ class Registrationwatch implements \BMO {
 				'alertHistory' => $this->getAlertHistory(),
 				'timeDiagnostics' => $this->getTimeDiagnostics(),
 				'timestamp' => $this->now(),
+				'monitoringState' => $this->getMonitoringState(),
 			];
 		} catch (\Exception $e) {
 			$this->logWarning('Registration map retrieval failed: ' . $e->getMessage());
@@ -692,6 +701,30 @@ class Registrationwatch implements \BMO {
 		}
 	}
 
+	private function handleSnoozeMonitoring(): array {
+		$allowed = [300, 900, 1800, 3600];
+		$seconds = isset($_REQUEST['seconds']) ? (int)$_REQUEST['seconds'] : 0;
+		if (!in_array($seconds, $allowed, true)) {
+			return ['status' => false, 'message' => _('Invalid snooze duration.')];
+		}
+		$until = date('Y-m-d H:i:s', strtotime($this->now()) + $seconds);
+		$this->setSetting('monitoring_snoozed_until', $until);
+		return [
+			'status' => true,
+			'message' => _('Monitoring snoozed.'),
+			'monitoringState' => $this->getMonitoringState(),
+		];
+	}
+
+	private function handleResumeMonitoring(): array {
+		$this->setSetting('monitoring_snoozed_until', '');
+		return [
+			'status' => true,
+			'message' => _('Monitoring resumed.'),
+			'monitoringState' => $this->getMonitoringState(),
+		];
+	}
+
 	private function getPageData(bool $refreshStatus): array {
 		$refreshError = '';
 		if ($refreshStatus) {
@@ -713,6 +746,7 @@ class Registrationwatch implements \BMO {
 			'timeDiagnostics' => $this->getTimeDiagnostics(),
 			'pollIntervalSeconds' => $this->getPollInterval(),
 			'refreshError' => $refreshError,
+			'monitoringState' => $this->getMonitoringState(),
 		];
 	}
 
@@ -2431,6 +2465,22 @@ class Registrationwatch implements \BMO {
 			return;
 		}
 
+		if ($this->isMonitoringSnoozed()) {
+			foreach ($alerts as $alert) {
+				$this->updateReservedAlertHistory(
+					(int)$alert['history_id'],
+					(string)$alert['alert_type'],
+					(string)$alert['recipient'],
+					'suppressed',
+					'Monitoring snoozed',
+					$now,
+					(int)($alert['reminder_n'] ?? 0)
+				);
+			}
+			$this->markReminderCyclesComplete($reminderCycles, $now);
+			return;
+		}
+
 		$threshold = $this->stormThreshold($settings);
 		if ($threshold > 0 && count($alerts) >= $threshold) {
 			$summaryResults = $this->dispatchStormSummary($alerts, $recipients, $now);
@@ -3605,6 +3655,42 @@ class Registrationwatch implements \BMO {
 		}
 
 		return $state;
+	}
+
+	private function isMonitoringSnoozed(): bool {
+		$settings = $this->getAlertSettings();
+		$until = trim((string)($settings['monitoring_snoozed_until'] ?? ''));
+		if ($until === '') {
+			return false;
+		}
+		$ts = strtotime($until);
+		return $ts !== false && $ts > strtotime($this->now());
+	}
+
+	private function hasMonitoredExtensions(): bool {
+		try {
+			$stmt = $this->db()->query(
+				'SELECT COUNT(*) FROM registrationwatch_registrations WHERE enabled = 1 AND discovered = 1'
+			);
+			return $stmt ? (int)$stmt->fetchColumn() > 0 : false;
+		} catch (\Throwable $e) {
+			return false;
+		}
+	}
+
+	private function getMonitoringState(): array {
+		if (!$this->hasMonitoredExtensions()) {
+			return ['state' => 'inactive', 'snoozed_until' => null];
+		}
+		$settings = $this->getAlertSettings();
+		$until = trim((string)($settings['monitoring_snoozed_until'] ?? ''));
+		if ($until !== '') {
+			$ts = strtotime($until);
+			if ($ts !== false && $ts > strtotime($this->now())) {
+				return ['state' => 'snoozed', 'snoozed_until' => $until];
+			}
+		}
+		return ['state' => 'active', 'snoozed_until' => null];
 	}
 
 	private function now(): string {
