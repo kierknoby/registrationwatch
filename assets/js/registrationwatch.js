@@ -229,7 +229,10 @@
 			monitoredCell = buildMonitoredCellHtml(parseInt(registration.enabled, 10));
 		}
 
-		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '"' + (parseInt(registration.enabled, 10) ? ' class="rw-row-enabled"' : '') + '>' +
+		var rowEnabled = parseInt(registration.enabled, 10);
+		var rowStatus = String(registration.last_known_status || registration.status || '').trim().toLowerCase();
+		var rowCls = rowEnabled ? ((rowStatus === 'unreachable' || rowStatus === 'not registered') ? ' class="rw-row-fault"' : ' class="rw-row-enabled"') : '';
+		return '<tr data-registration-id="' + id + '" data-extension="' + escapeHtml(registration.extension) + '"' + rowCls + '>' +
 			'<td data-label="Monitored">' + monitoredCell + '</td>' +
 			'<td data-label="Extension">' + escapeHtml(registration.extension) + '</td>' +
 			'<td data-label="Description">' + escapeHtml(registration.description || '-') + '</td>' +
