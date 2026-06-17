@@ -913,7 +913,16 @@
 					btn.prop('disabled', false);
 					return;
 				}
-				row.removeClass('rw-row-enabled');
+				row.removeClass('rw-row-fault rw-row-enabled');
+				if (rwTableSort.latestWatched) {
+					var disabledId = parseInt(registrationId, 10);
+					$.each(rwTableSort.latestWatched, function (_, reg) {
+						if (parseInt(reg.registration_id || reg.id, 10) === disabledId) {
+							reg.enabled = 0;
+							return false;
+						}
+					});
+				}
 				btn.closest('td').html(
 					'<label class="rw-toggle">' +
 					'<input type="checkbox" class="rw-enabled">' +
