@@ -1,4 +1,4 @@
-# Registration Watch for FreePBX 17
+# Registration Watch 1.2.0 for FreePBX 17
 
 Registration Watch (`registrationwatch`) watches SIP/PJSIP registration state in
 FreePBX/PBXact 17. It discovers configured FreePBX PJSIP devices and tracks
@@ -184,9 +184,8 @@ short reloads, restarts, and transient network events.
 
 Storm Threshold limits large batches of alerts generated in the same processing
 pass. It reduces email floods from sudden widespread registration changes, but
-it is not full correlated-outage detection. The count is per registration, not
-per extension, so an extension with several devices can contribute several
-alerts. Use 0 to disable.
+it is not full correlated-outage detection. The count is per registration. Use
+0 to disable.
 
 Watched registrations that have been continuously absent for 30 days are
 auto-disabled to stop stale entries from alerting indefinitely. They remain
@@ -368,6 +367,7 @@ This minor release renames EndPoint Monitor to Registration Watch, moves the mod
 * Adds live module/database time diagnostics to help confirm current server-side timing during refresh and alert testing.
 * Moves diagnostics into a quiet page footer while preserving live AJAX updates.
 * Replaces stale Manual Refresh empty-state wording with clearer refresh/status messaging.
+* Aligns Storm Summary email wording with Alert Settings help text and fixes singular/plural suppression wording.
 
 #### Snooze Monitoring
 
@@ -391,6 +391,7 @@ This minor release renames EndPoint Monitor to Registration Watch, moves the mod
 * Fixes notes rendering after AJAX refresh.
 * Fixes saved notes disappearing after sorting by updating the in-memory watched-registration cache after a successful notes save.
 * Fixes Repeat alerts dropdown reliability in the Watched Extensions table.
+* Clears active-alert row styling immediately after Disable Alerting succeeds.
 * Prevents duplicate Repeat alerts handler binding.
 * Prevents automatic refresh from interrupting Watched Extensions controls while they are being used.
 * Keeps watched-row controls usable during automatic topology refreshes.
