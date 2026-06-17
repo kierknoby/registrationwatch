@@ -849,7 +849,7 @@
 			});
 		});
 
-		root.on('click', '.rw-row-snooze-option', function (e) {
+		$(document).on('click', '.registrationwatch .rw-row-snooze-option', function (e) {
 			e.preventDefault();
 			var link = $(this);
 			var row = link.closest('tr');
