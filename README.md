@@ -254,6 +254,12 @@ use raw PHP `mail()` fallback. A successful local mailer handoff means the
 message was accepted by the PBX mailer, not that final external delivery is
 guaranteed.
 
+## Push Mobile Softphones
+
+Registration Watch is designed primarily for monitoring desk phones, gateways, and other endpoints that maintain a stable PJSIP registration. Push-based mobile softphones such as Bria may create temporary, duplicate, stale, or rapidly changing PJSIP contacts as the application or operating system manages background activity.
+
+Registration Watch reports the contact state exposed by Asterisk and does not attempt to reconcile multiple or transient contacts that a push-enabled mobile application may present. Where alerting is not desirable, individual extensions can be excluded from alerting.
+
 ## Snooze Monitoring
 
 Snooze Monitoring is a global pause control in the top monitoring banner. While
